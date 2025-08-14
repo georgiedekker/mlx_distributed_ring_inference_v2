@@ -1,0 +1,15 @@
+# MLX and MLX-LM for distributed inference
+mlx>=0.10.0
+mlx-lm>=0.10.0
+
+# FastAPI for REST API
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0
+
+# HuggingFace for model downloads
+huggingface-hub>=0.20.0
+transformers>=4.36.0
+
+# Utilities
+numpy>=1.24.0

@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+logs/
+*.out
+*.err
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# MLX/ML
+*.ckpt
+*.safetensors
+*.bin
+checkpoints/
+outputs/
+runs/
+
+# Temporary files
+*.tmp
+.cache/
+tmp/
+.*.pid
+
+# Local configuration (generated at runtime)
+hosts.json
+rankfile*
+
+# Test/experimental files (not needed for main functionality)
+server_clean.py
+server_complex.py
+test_*.py
+*.md
+!README.md
+!LICENSE
