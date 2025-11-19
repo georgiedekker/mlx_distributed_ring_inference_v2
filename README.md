@@ -355,6 +355,52 @@ curl -X POST http://localhost:8100/v1/chat/completions \
   }'
 ```
 
+## Configuration
+
+### Quick Start with Defaults
+
+The system works out-of-the-box with sensible defaults. No configuration required!
+
+### Custom Configuration (Optional)
+
+For advanced users, create a `.env` file to customize settings:
+
+```bash
+# Copy the example configuration
+cp .env.example .env
+
+# Edit with your preferences
+nano .env
+```
+
+**Key Configuration Options:**
+
+```bash
+# Model settings
+MODEL_REPO=mlx-community/DeepSeek-Coder-V2-Lite-Instruct-8bit
+DEFAULT_MAX_TOKENS=512
+
+# KV-Cache tuning (NEW in v2.0!)
+KV_CACHE_MAX_SIZE=8192              # Maximum cache entries
+KV_CACHE_RESERVED_MEMORY_MB=2048    # Reserved memory for cache
+MAX_SEQUENCE_LENGTH=4096            # Maximum sequence length
+
+# Network settings
+API_HOST=192.168.5.1
+API_PORT=8100
+WORKER_HOSTS=192.168.5.2
+
+# Performance tuning
+MAX_PROMPT_LEN_BYTES=4096    # Increased from 1000!
+REQUEST_TIMEOUT=120
+POLL_INTERVAL=0.1
+
+# Logging
+LOG_LEVEL=INFO               # DEBUG, INFO, WARNING, ERROR
+```
+
+See `.env.example` for all available options and detailed documentation in `config/README.md`.
+
 ## Using the System
 
 ### Starting and Stopping
@@ -501,13 +547,27 @@ MIT License
 
 ```
 mlx_distributed_ring_inference/
-├── launch.sh          # Main launcher script - manages distributed setup
-├── server.py          # Distributed MLX inference server
-├── api.py            # FastAPI server providing OpenAI-compatible endpoint
-├── requirements.txt   # Python dependencies
-├── LICENSE           # MIT License
-└── README.md         # This file
+├── launch.sh                         # Main launcher script - manages distributed setup
+├── server.py                         # Distributed MLX inference server
+├── api.py                           # FastAPI server providing OpenAI-compatible endpoint
+├── requirements.txt                  # Python dependencies
+├── LICENSE                          # MIT License
+├── README.md                        # This file
+├── archived_features/               # Archived experimental code (see below)
+└── archived_features_2025-11-18.tar.gz  # Compressed archive of unused features
 ```
+
+## Archived Features
+
+Several experimental implementations have been archived as they are no longer used in the current codebase:
+
+- **qwen_moe_mini.py** - Mixture-of-Experts model with pipeline parallelism
+- **memory_aware_sharding.py** - Memory-aware layer distribution for heterogeneous clusters
+- **base.py** - Enhanced KV cache implementation with MLX native features
+- **server_with_prompt_cache.py** - Alternative server with advanced prompt caching
+- **shard.py** - Manual shard utilities for pipeline parallelism
+
+These files are preserved in `archived_features/` and compressed in `archived_features_2025-11-18.tar.gz` for reference. See `archived_features/README.md` for detailed documentation on each archived component and restoration instructions.
 
 ## How It Works
 

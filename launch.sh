@@ -53,9 +53,17 @@ start_servers() {
 ]
 EOF
     
-    # Sync server to mini2
-    echo "Syncing server.py to mini2..."
+    # Sync server, config, and distributed utils to mini2
+    echo "Syncing files to mini2..."
     scp server.py mini2@192.168.5.2:/Users/Shared/mlx_distributed_ring_inference_v2/
+    scp -r config mini2@192.168.5.2:/Users/Shared/mlx_distributed_ring_inference_v2/
+    scp -r distributed mini2@192.168.5.2:/Users/Shared/mlx_distributed_ring_inference_v2/
+
+    # Sync .env if it exists (optional configuration)
+    if [ -f .env ]; then
+        echo "Syncing .env configuration..."
+        scp .env mini2@192.168.5.2:/Users/Shared/mlx_distributed_ring_inference_v2/
+    fi
     
     echo ""
     echo -e "${YELLOW}Starting distributed server...${NC}"
