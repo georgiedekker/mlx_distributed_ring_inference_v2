@@ -51,6 +51,7 @@ rankfile*
 server_clean.py
 server_complex.py
 test_*.py
+!test_config.py
 *.md
 !README.md
 !LICENSE

@@ -1,0 +1,31 @@
+{
+  "model": {
+    "default_repo": "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-8bit",
+    "cache_base_path": "/Users/{username}/.cache/huggingface/hub",
+    "max_prompt_length": 4096,
+    "default_max_tokens": 50
+  },
+  "paths": {
+    "request_file": "/tmp/mlx_request.json",
+    "response_file": "/tmp/mlx_response.json",
+    "temp_dir": "/tmp"
+  },
+  "performance": {
+    "poll_interval": 0.1,
+    "request_timeout": 60,
+    "file_descriptor_soft_limit": 2048,
+    "file_descriptor_hard_limit": 4096,
+    "model_load_wait_time": 15
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8100,
+    "enable_cors": false,
+    "cors_origins": ["*"]
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(levelname)s - [Rank %(rank)s] - %(message)s",
+    "simple_format": "%(asctime)s - %(levelname)s - %(message)s"
+  }
+}
