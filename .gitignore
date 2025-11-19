@@ -54,4 +54,6 @@ test_*.py
 !test_config.py
 *.md
 !README.md
+!CHANGELOG.md
+!REFACTORING_SUMMARY.md
 !LICENSE
