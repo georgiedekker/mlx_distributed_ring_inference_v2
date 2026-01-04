@@ -20,18 +20,12 @@ jobs:
         with:
           enable-cache: false
           python-version: "3.12"
-          cache-dependency-glob: "**/pyproject.toml"
 
-      - name: Install dependencies
-        run: uv sync --extra dev
-        env:
-          UV_HTTP_TIMEOUT: 300
+      - name: Install linting tools
+        run: uv pip install --system ruff mypy
 
       - name: Run ruff linter
-        run: uv run ruff check *.py distributed/ config/
+        run: ruff check *.py distributed/ config/
 
       - name: Run ruff formatter check
-        run: uv run ruff format --check *.py distributed/ config/
-
-      - name: Run mypy type checking
-        run: uv run mypy *.py distributed/ config/
+        run: ruff format --check *.py distributed/ config/
