@@ -10,7 +10,7 @@ on:
 
 jobs:
   lint:
-    name: Lint & Type Check
+    name: Lint Check
     runs-on: [self-hosted, linux, arm64]
     steps:
       - uses: actions/checkout@v4
@@ -21,11 +21,8 @@ jobs:
           enable-cache: false
           python-version: "3.12"
 
-      - name: Install linting tools
-        run: uv pip install --system ruff mypy
-
       - name: Run ruff linter
-        run: ruff check *.py distributed/ config/
+        run: uvx ruff check *.py distributed/ config/
 
       - name: Run ruff formatter check
-        run: ruff format --check *.py distributed/ config/
+        run: uvx ruff format --check *.py distributed/ config/
