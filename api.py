@@ -28,8 +28,7 @@ config = get_config()
 
 # Configure logging
 logging.basicConfig(
-    level=getattr(logging, config.logging.level),
-    format=config.logging.simple_format
+    level=getattr(logging, config.logging.level), format=config.logging.simple_format
 )
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="MLX Distributed Inference API",
     description="REST API for distributed MLX inference",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Add CORS middleware if enabled
@@ -54,56 +53,54 @@ if config.api.enable_cors:
 
 class ChatMessage(BaseModel):
     """A single chat message."""
+
     role: str = Field(..., description="Role of the message sender (user/assistant/system)")
     content: str = Field(..., description="Content of the message")
 
-    @validator('role')
+    @validator("role")
     def validate_role(cls, v):
         """Validate that role is one of the allowed values."""
-        if v not in ['user', 'assistant', 'system']:
-            raise ValueError('Role must be one of: user, assistant, system')
+        if v not in ["user", "assistant", "system"]:
+            raise ValueError("Role must be one of: user, assistant, system")
         return v
 
-    @validator('content')
+    @validator("content")
     def validate_content(cls, v):
         """Validate that content is not empty."""
         if not v or not v.strip():
-            raise ValueError('Content cannot be empty')
+            raise ValueError("Content cannot be empty")
         return v
 
 
 class ChatRequest(BaseModel):
     """Chat completion request following OpenAI format."""
+
     model: str = Field(default="DeepSeek", description="Model to use for completion")
     messages: List[ChatMessage] = Field(..., description="List of chat messages")
     max_tokens: int = Field(
-        default=100,
-        ge=1,
-        le=4096,
-        description="Maximum number of tokens to generate"
+        default=100, ge=1, le=4096, description="Maximum number of tokens to generate"
     )
     temperature: float = Field(
-        default=0.7,
-        ge=0.0,
-        le=2.0,
-        description="Sampling temperature (not currently used)"
+        default=0.7, ge=0.0, le=2.0, description="Sampling temperature (not currently used)"
     )
-    stream: bool = Field(default=False, description="Whether to stream responses (not currently supported)")
+    stream: bool = Field(
+        default=False, description="Whether to stream responses (not currently supported)"
+    )
     conversation_id: Optional[str] = Field(
-        default=None,
-        description="Optional conversation ID for caching"
+        default=None, description="Optional conversation ID for caching"
     )
 
-    @validator('messages')
+    @validator("messages")
     def validate_messages(cls, v):
         """Validate that messages list is not empty."""
         if not v:
-            raise ValueError('Messages list cannot be empty')
+            raise ValueError("Messages list cannot be empty")
         return v
 
 
 class ChatResponse(BaseModel):
     """Chat completion response following OpenAI format."""
+
     id: str = Field(..., description="Unique response ID")
     object: str = Field(default="chat.completion", description="Object type")
     created: int = Field(..., description="Unix timestamp of creation")
@@ -116,6 +113,7 @@ class ChatResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Error response model."""
+
     error: str = Field(..., description="Error message")
     detail: Optional[str] = Field(default=None, description="Additional error details")
 
@@ -130,10 +128,7 @@ async def health():
     return {
         "status": "healthy",
         "api": "ready",
-        "config": {
-            "port": config.api.port,
-            "cors_enabled": config.api.enable_cors
-        }
+        "config": {"port": config.api.port, "cors_enabled": config.api.enable_cors},
     }
 
 
@@ -147,10 +142,7 @@ async def root():
     return {
         "name": "MLX Distributed Inference API",
         "version": "1.0.0",
-        "endpoints": {
-            "health": "/health",
-            "chat": "/v1/chat/completions"
-        }
+        "endpoints": {"health": "/health", "chat": "/v1/chat/completions"},
     }
 
 
@@ -166,9 +158,7 @@ def check_server_running() -> bool:
 
 
 async def wait_for_response_file(
-    response_file: str,
-    timeout: int,
-    poll_interval: float = 0.1
+    response_file: str, timeout: int, poll_interval: float = 0.1
 ) -> Optional[Dict]:
     """Wait for response file to be created and read it.
 
@@ -191,7 +181,7 @@ async def wait_for_response_file(
                 # Small delay to ensure file is fully written
                 await asyncio.sleep(0.05)
 
-                with open(response_file, 'r') as f:
+                with open(response_file, "r") as f:
                     response_data = json.load(f)
 
                 # Clean up response file
@@ -204,16 +194,10 @@ async def wait_for_response_file(
 
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse response JSON: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Invalid response from server"
-                )
+                raise HTTPException(status_code=500, detail="Invalid response from server")
             except (IOError, OSError) as e:
                 logger.error(f"Failed to read response file: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to read response: {str(e)}"
-                )
+                raise HTTPException(status_code=500, detail=f"Failed to read response: {str(e)}")
 
         await asyncio.sleep(poll_interval)
 
@@ -221,7 +205,7 @@ async def wait_for_response_file(
     logger.error(f"Timeout waiting for response (timeout={timeout}s)")
     raise HTTPException(
         status_code=504,
-        detail=f"Request timeout after {timeout} seconds. Server may be overloaded or not running."
+        detail=f"Request timeout after {timeout} seconds. Server may be overloaded or not running.",
     )
 
 
@@ -252,10 +236,7 @@ async def chat_completions(req: ChatRequest):
 
     # Check if streaming is requested (not supported yet)
     if req.stream:
-        raise HTTPException(
-            status_code=501,
-            detail="Streaming is not currently supported"
-        )
+        raise HTTPException(status_code=501, detail="Streaming is not currently supported")
 
     request_file = config.paths.request_file
     response_file = config.paths.response_file
@@ -271,26 +252,21 @@ async def chat_completions(req: ChatRequest):
     request_data = {
         "prompt": prompt,
         "max_tokens": req.max_tokens,
-        "conversation_id": conversation_id
+        "conversation_id": conversation_id,
     }
 
     try:
-        with open(request_file, 'w') as f:
+        with open(request_file, "w") as f:
             json.dump(request_data, f)
         logger.debug(f"Request written to {request_file}")
     except (IOError, OSError) as e:
         logger.error(f"Failed to write request file: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to write request: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to write request: {str(e)}")
 
     # Wait for response with timeout
     try:
         response_data = await wait_for_response_file(
-            response_file,
-            config.performance.request_timeout,
-            config.performance.poll_interval
+            response_file, config.performance.request_timeout, config.performance.poll_interval
         )
     except HTTPException:
         # Clean up request file if it still exists
@@ -305,10 +281,7 @@ async def chat_completions(req: ChatRequest):
     if "error" in response_data:
         error_msg = response_data.get("error", "Unknown error")
         logger.error(f"Server returned error: {error_msg}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Server error: {error_msg}"
-        )
+        raise HTTPException(status_code=500, detail=f"Server error: {error_msg}")
 
     # Format response following OpenAI format
     response = ChatResponse(
@@ -316,27 +289,25 @@ async def chat_completions(req: ChatRequest):
         created=int(time.time()),
         model=req.model,
         conversation_id=conversation_id,
-        choices=[{
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": response_data.get("response", "")
-            },
-            "finish_reason": "stop"
-        }],
+        choices=[
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": response_data.get("response", "")},
+                "finish_reason": "stop",
+            }
+        ],
         usage={
             "prompt_tokens": response_data.get("prompt_tokens", 0),
             "completion_tokens": response_data.get("generated_tokens", 0),
             "total_tokens": (
-                response_data.get("prompt_tokens", 0) +
-                response_data.get("generated_tokens", 0)
-            )
+                response_data.get("prompt_tokens", 0) + response_data.get("generated_tokens", 0)
+            ),
         },
         performance={
             "prompt_eval_tokens_per_second": response_data.get("prompt_eval_tokens_per_second", 0),
             "eval_tokens_per_second": response_data.get("eval_tokens_per_second", 0),
-            "cache_hit": response_data.get("cache_hit", False)
-        }
+            "cache_hit": response_data.get("cache_hit", False),
+        },
     )
 
     logger.info(
@@ -359,10 +330,7 @@ async def value_error_handler(request, exc):
         JSONResponse with error details
     """
     logger.warning(f"Validation error: {exc}")
-    return JSONResponse(
-        status_code=400,
-        content={"error": "Validation error", "detail": str(exc)}
-    )
+    return JSONResponse(status_code=400, content={"error": "Validation error", "detail": str(exc)})
 
 
 @app.exception_handler(Exception)
@@ -378,8 +346,7 @@ async def general_exception_handler(request, exc):
     """
     logger.error(f"Unexpected error: {exc}", exc_info=True)
     return JSONResponse(
-        status_code=500,
-        content={"error": "Internal server error", "detail": str(exc)}
+        status_code=500, content={"error": "Internal server error", "detail": str(exc)}
     )
 
 
@@ -400,10 +367,7 @@ def main():
     logger.info("=" * 60)
 
     uvicorn.run(
-        app,
-        host=config.api.host,
-        port=config.api.port,
-        log_level=config.logging.level.lower()
+        app, host=config.api.host, port=config.api.port, log_level=config.logging.level.lower()
     )
 
 

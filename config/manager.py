@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class ConfigValidationError(Exception):
     """Raised when configuration validation fails."""
+
     pass
 
 
@@ -36,7 +37,7 @@ class ModelConfig:
 
         # Expand ${USER} in cache_dir
         if self.cache_dir and "${USER}" in self.cache_dir:
-            username = os.getenv('USER', 'user')
+            username = os.getenv("USER", "user")
             self.cache_dir = self.cache_dir.replace("${USER}", username)
 
         logger.debug(f"Model config: repo={self.repo}, cache_dir={self.cache_dir or 'default'}")
@@ -77,8 +78,7 @@ class NetworkConfig:
             )
 
         logger.debug(
-            f"Network config: api={self.api_host}:{self.api_port}, "
-            f"workers={len(self.worker_hosts)}"
+            f"Network config: api={self.api_host}:{self.api_port}, workers={len(self.worker_hosts)}"
         )
 
 
@@ -162,9 +162,7 @@ class DistributedConfig:
     def __post_init__(self):
         """Validate distributed configuration."""
         if self.num_devices < 1:
-            raise ConfigValidationError(
-                f"NUM_DEVICES must be positive, got {self.num_devices}"
-            )
+            raise ConfigValidationError(f"NUM_DEVICES must be positive, got {self.num_devices}")
 
         valid_backends = ["ring", "nccl", "gloo"]
         if self.backend not in valid_backends:
@@ -173,9 +171,7 @@ class DistributedConfig:
                 f"Proceeding anyway..."
             )
 
-        logger.debug(
-            f"Distributed config: {self.num_devices} devices, backend={self.backend}"
-        )
+        logger.debug(f"Distributed config: {self.num_devices} devices, backend={self.backend}")
 
 
 @dataclass
@@ -206,8 +202,7 @@ class FilePathsConfig:
                 raise ConfigValidationError(f"{name} cannot be empty")
 
         logger.debug(
-            f"File paths: request={self.request_file_path}, "
-            f"response={self.response_file_path}"
+            f"File paths: request={self.request_file_path}, response={self.response_file_path}"
         )
 
 
@@ -264,7 +259,7 @@ class Config:
     system: SystemConfig
 
     @classmethod
-    def from_env(cls) -> 'Config':
+    def from_env(cls) -> "Config":
         """
         Create configuration from environment variables.
 
@@ -274,6 +269,7 @@ class Config:
         Raises:
             ConfigValidationError: If any configuration value is invalid
         """
+
         def get_env_int(key: str, default: int) -> int:
             """Get integer from environment with validation."""
             value = os.getenv(key)
@@ -282,9 +278,7 @@ class Config:
             try:
                 return int(value)
             except ValueError:
-                raise ConfigValidationError(
-                    f"{key} must be an integer, got '{value}'"
-                )
+                raise ConfigValidationError(f"{key} must be an integer, got '{value}'")
 
         def get_env_float(key: str, default: float) -> float:
             """Get float from environment with validation."""
@@ -294,9 +288,7 @@ class Config:
             try:
                 return float(value)
             except ValueError:
-                raise ConfigValidationError(
-                    f"{key} must be a number, got '{value}'"
-                )
+                raise ConfigValidationError(f"{key} must be a number, got '{value}'")
 
         def get_env_list(key: str, default: List[str]) -> List[str]:
             """Get comma-separated list from environment."""
@@ -304,7 +296,7 @@ class Config:
             if value is None:
                 return default
             # Split by comma and strip whitespace
-            return [item.strip() for item in value.split(',') if item.strip()]
+            return [item.strip() for item in value.split(",") if item.strip()]
 
         def get_env_optional_int(key: str, default: Optional[int]) -> Optional[int]:
             """Get optional integer from environment."""
@@ -314,9 +306,7 @@ class Config:
             try:
                 return int(value)
             except ValueError:
-                raise ConfigValidationError(
-                    f"{key} must be an integer or empty, got '{value}'"
-                )
+                raise ConfigValidationError(f"{key} must be an integer or empty, got '{value}'")
 
         # Create configuration sections
         model_config = ModelConfig(
@@ -405,6 +395,7 @@ def load_config(env_file: Optional[str] = None) -> Config:
     if env_path.exists():
         try:
             from dotenv import load_dotenv
+
             load_dotenv(env_path)
             logger.info(f"Loaded configuration from {env_path}")
         except ImportError:

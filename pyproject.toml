@@ -38,6 +38,9 @@ include = ["distributed*", "config*"]
 line-length = 100
 target-version = "py310"
 
+[tool.local-ci]
+skip_tests = true  # Requires Apple Silicon (MLX) - tests run manually on mini1/mini2
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true

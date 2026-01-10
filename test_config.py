@@ -62,7 +62,9 @@ def test_default_config():
         print(f"  - API Log: {config.file_paths.api_log_path}")
 
         print("\nSystem Configuration:")
-        print(f"  - File Descriptor Limits: ({config.system.file_descriptor_soft_limit}, {config.system.file_descriptor_hard_limit})")
+        print(
+            f"  - File Descriptor Limits: ({config.system.file_descriptor_soft_limit}, {config.system.file_descriptor_hard_limit})"
+        )
         print(f"  - Model Load Wait: {config.system.model_load_wait_seconds} seconds")
         print(f"  - Log Level: {config.system.log_level}")
 

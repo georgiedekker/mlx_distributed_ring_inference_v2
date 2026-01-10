@@ -22,11 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def broadcast_prompt(
-    prompt: Optional[str],
-    rank: int,
-    max_tokens: int,
-    group,
-    max_len: int = 1000
+    prompt: Optional[str], rank: int, max_tokens: int, group, max_len: int = 1000
 ) -> Tuple[bool, str, int]:
     """
     Broadcast prompt and parameters from rank 0 to all other ranks.
@@ -78,7 +74,7 @@ def broadcast_prompt(
     if has_work.item() > 0:
         # Broadcast prompt length
         if rank == 0:
-            prompt_bytes = prompt.encode('utf-8')
+            prompt_bytes = prompt.encode("utf-8")
             prompt_len = len(prompt_bytes)
             params = mx.array([float(prompt_len), float(max_tokens)])
         else:
@@ -93,7 +89,7 @@ def broadcast_prompt(
         # Broadcast prompt text
         if rank == 0:
             # Pad prompt to fixed size for simplicity
-            padded = prompt_bytes[:max_len].ljust(max_len, b'\0')
+            padded = prompt_bytes[:max_len].ljust(max_len, b"\0")
             prompt_array = mx.array([float(b) for b in padded])
         else:
             prompt_array = mx.zeros(max_len)
@@ -103,7 +99,7 @@ def broadcast_prompt(
 
         # Reconstruct prompt
         prompt_bytes = bytes([int(v.item()) for v in prompt_array[:prompt_len]])
-        prompt = prompt_bytes.decode('utf-8')
+        prompt = prompt_bytes.decode("utf-8")
 
         return True, prompt, max_tokens
     else:
@@ -161,19 +157,20 @@ def shard_and_load(repo: str, config: Any = None, adapter_path: str = "") -> Tup
         All ranks must call this function collectively.
     """
     # Use local cached model instead of downloading
-    username = os.getenv('USER', 'mini1')  # Get current user (mini1 or mini2)
+    username = os.getenv("USER", "mini1")  # Get current user (mini1 or mini2)
 
-    if config and hasattr(config, 'model') and hasattr(config.model, 'cache_base_path'):
+    if config and hasattr(config, "model") and hasattr(config.model, "cache_base_path"):
         cache_path_template = config.model.cache_base_path.format(username=username)
         model_path = Path(cache_path_template) / f"models--{repo.replace('/', '--')}"
     else:
         # Fallback to default path
-        model_path = Path(f"/Users/{username}/.cache/huggingface/hub/models--{repo.replace('/', '--')}")
+        model_path = Path(
+            f"/Users/{username}/.cache/huggingface/hub/models--{repo.replace('/', '--')}"
+        )
 
     if not model_path.exists():
         raise FileNotFoundError(
-            f"Model cache directory not found: {model_path}. "
-            f"Please download the model first."
+            f"Model cache directory not found: {model_path}. Please download the model first."
         )
 
     # Find the snapshot directory

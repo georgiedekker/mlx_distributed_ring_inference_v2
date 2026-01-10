@@ -29,16 +29,17 @@ config = get_config()
 try:
     resource.setrlimit(
         resource.RLIMIT_NOFILE,
-        (config.performance.file_descriptor_soft_limit,
-         config.performance.file_descriptor_hard_limit)
+        (
+            config.performance.file_descriptor_soft_limit,
+            config.performance.file_descriptor_hard_limit,
+        ),
     )
 except (ValueError, OSError) as e:
     print(f"Warning: Could not set file descriptor limit: {e}")
 
 # Configure logging
 logging.basicConfig(
-    level=getattr(logging, config.logging.level),
-    format=config.logging.simple_format
+    level=getattr(logging, config.logging.level), format=config.logging.simple_format
 )
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ def read_request_file(request_file: str) -> Optional[Dict]:
         return None
 
     try:
-        with open(request_file, 'r') as f:
+        with open(request_file, "r") as f:
             request = json.load(f)
 
         # Validate request format
@@ -124,9 +125,7 @@ def read_request_file(request_file: str) -> Optional[Dict]:
 
 
 def write_response_file(
-    response_file: str,
-    response_data: Dict,
-    request_file: Optional[str] = None
+    response_file: str, response_data: Dict, request_file: Optional[str] = None
 ) -> bool:
     """Write the response to a file.
 
@@ -139,7 +138,7 @@ def write_response_file(
         True if successful, False otherwise
     """
     try:
-        with open(response_file, 'w') as f:
+        with open(response_file, "w") as f:
             json.dump(response_data, f)
         logger.debug("Response written to file")
         return True
@@ -176,10 +175,12 @@ def main():
 
     # Update logger format to include rank
     old_factory = logging.getLogRecordFactory()
+
     def record_factory(*args, **kwargs):
         record = old_factory(*args, **kwargs)
         record.rank = rank
         return record
+
     logging.setLogRecordFactory(record_factory)
 
     # Update logging format to include rank
@@ -215,26 +216,19 @@ def main():
                         cache_hit = True
 
                 logger.info(
-                    f"Processing: {prompt[:50]}... "
-                    f"(cache: {'HIT' if cache_hit else 'MISS'})"
+                    f"Processing: {prompt[:50]}... (cache: {'HIT' if cache_hit else 'MISS'})"
                 )
 
         # Broadcast prompt and parameters from rank 0 to all other ranks
         has_work, prompt, max_tokens = broadcast_prompt(
-            prompt,
-            rank,
-            max_tokens,
-            group,
-            max_len=config.model.max_prompt_length
+            prompt, rank, max_tokens, group, max_len=config.model.max_prompt_length
         )
 
         if has_work:
             # ALL ranks format prompt identically
             messages = [{"role": "user", "content": prompt}]
             formatted_prompt = tokenizer.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=False
+                messages, add_generation_prompt=True, tokenize=False
             )
 
             # ALL ranks generate together
@@ -244,10 +238,7 @@ def main():
 
             try:
                 for response in stream_generate(
-                    model,
-                    tokenizer,
-                    formatted_prompt,
-                    max_tokens=max_tokens
+                    model, tokenizer, formatted_prompt, max_tokens=max_tokens
                 ):
                     if rank == 0:
                         # stream_generate returns DELTAS (new tokens), not accumulated text!
@@ -266,8 +257,8 @@ def main():
                         {
                             "error": str(e),
                             "response": "",
-                            "conversation_id": conversation_id or "default"
-                        }
+                            "conversation_id": conversation_id or "default",
+                        },
                     )
                 continue
 
@@ -275,10 +266,12 @@ def main():
                 print()  # Newline
 
                 # Get actual metrics from stream_generate's final response
-                prompt_tokens = getattr(last_response, 'prompt_tokens', 0) if last_response else 0
-                prompt_tps = getattr(last_response, 'prompt_tps', 0) if last_response else 0
-                generation_tokens = getattr(last_response, 'generation_tokens', 0) if last_response else 0
-                generation_tps = getattr(last_response, 'generation_tps', 0) if last_response else 0
+                prompt_tokens = getattr(last_response, "prompt_tokens", 0) if last_response else 0
+                prompt_tps = getattr(last_response, "prompt_tps", 0) if last_response else 0
+                generation_tokens = (
+                    getattr(last_response, "generation_tokens", 0) if last_response else 0
+                )
+                generation_tps = getattr(last_response, "generation_tps", 0) if last_response else 0
 
                 logger.info(f"Generated: '{response_text}'")
                 logger.info(
@@ -299,8 +292,8 @@ def main():
                         "prompt_tokens": prompt_tokens,
                         "generated_tokens": generation_tokens,
                         "prompt_eval_tokens_per_second": round(prompt_tps, 2),
-                        "eval_tokens_per_second": round(generation_tps, 2)
-                    }
+                        "eval_tokens_per_second": round(generation_tps, 2),
+                    },
                 )
 
             # ALL ranks log completion

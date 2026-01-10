@@ -50,8 +50,12 @@ import mlx.nn as nn
 from base import IdentityBlock, KVCache  # Import from our base module
 from shard import Shard
 from memory_aware_sharding import (
-    get_rank_memory_info, parse_memory_config, estimate_model_memory,
-    create_memory_aware_sharding_plan, validate_sharding_plan, log_sharding_summary
+    get_rank_memory_info,
+    parse_memory_config,
+    estimate_model_memory,
+    create_memory_aware_sharding_plan,
+    validate_sharding_plan,
+    log_sharding_summary,
 )
 
 
@@ -62,6 +66,7 @@ class ModelArgs:
     The `shard` field is still present for backward compatibility, but
     when using pipeline parallelism its values are ignored.
     """
+
     model_type: str = "qwen_moe_mini"
     vocab_size: int = 32_000
     hidden_size: int = 1_024  # Smaller than standard models
@@ -266,16 +271,17 @@ class QwenMoEMiniModel(nn.Module):
         ensure the pipeline is set up on every process.
         """
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         self.pipeline_rank = group.rank()
         self.pipeline_size = group.size()
         total_layers = len(self.layers)
-        
+
         # Determine whether to use memory-aware sharding
         if use_memory_aware is None:
-            use_memory_aware = os.environ.get('MEMORY_AWARE_SHARDING', 'true').lower() == 'true'
-        
+            use_memory_aware = os.environ.get("MEMORY_AWARE_SHARDING", "true").lower() == "true"
+
         if use_memory_aware and self.pipeline_size > 1:
             logger.info(f"Using memory-aware pipeline sharding for {self.pipeline_size} ranks")
             try:
@@ -290,121 +296,127 @@ class QwenMoEMiniModel(nn.Module):
             else:
                 logger.info("Using traditional equal layer distribution (single rank)")
             self._setup_traditional_pipeline(group)
-        
+
         return self
-    
+
     def _setup_memory_aware_pipeline(self, group):
         """Setup pipeline using memory-aware layer distribution."""
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         total_layers = len(self.layers)
-        
+
         # Parse memory configuration
         memory_config = parse_memory_config()
-        
+
         # Get memory info for all ranks
         memory_infos = []
         for rank in range(self.pipeline_size):
             memory_info = get_rank_memory_info(rank, self.pipeline_size, memory_config)
             memory_infos.append(memory_info)
-        
+
         # Estimate layer memory requirements
         layer_estimates = estimate_model_memory(self, self.args)
-        
+
         if not layer_estimates:
             raise ValueError("Could not estimate layer memory requirements")
-        
+
         # Create memory-aware sharding plan
-        sharding_plans = create_memory_aware_sharding_plan(
-            memory_infos, layer_estimates
-        )
-        
+        sharding_plans = create_memory_aware_sharding_plan(memory_infos, layer_estimates)
+
         if not sharding_plans:
             raise ValueError("Could not create memory-aware sharding plan")
-        
+
         # Validate the plan
         is_valid, issues = validate_sharding_plan(sharding_plans, total_layers)
         if not is_valid:
             logger.warning("Sharding plan has issues:")
             for issue in issues:
                 logger.warning(f"  - {issue}")
-        
+
         # Log the sharding summary
         log_sharding_summary(sharding_plans, layer_estimates)
-        
+
         # Find our rank's plan
         our_plan = next((plan for plan in sharding_plans if plan.rank == self.pipeline_rank), None)
         if our_plan is None:
             raise ValueError(f"No sharding plan found for rank {self.pipeline_rank}")
-        
+
         # Apply the sharding plan
         if our_plan.num_layers > 0:
             # Note: We need to maintain reverse ordering for pipeline compatibility
             # Convert forward indices to reverse indices
             forward_start = our_plan.start_layer
             forward_end = our_plan.end_layer
-            
+
             # In reverse ordering, rank 0 gets the last layers
             # Map forward layer indices to reverse indices
             reverse_start = total_layers - forward_end - 1
             reverse_end = total_layers - forward_start - 1
-            
+
             self.start_idx = reverse_start
             self.end_idx = reverse_end + 1  # end_idx is exclusive
             self.num_layers = our_plan.num_layers
-            
-            logger.info(f"Rank {self.pipeline_rank}: Forward layers {forward_start}-{forward_end} -> "
-                       f"Reverse indices {self.start_idx}-{self.end_idx-1} ({self.num_layers} layers)")
+
+            logger.info(
+                f"Rank {self.pipeline_rank}: Forward layers {forward_start}-{forward_end} -> "
+                f"Reverse indices {self.start_idx}-{self.end_idx - 1} ({self.num_layers} layers)"
+            )
         else:
             # No layers assigned to this rank
             self.start_idx = 0
             self.end_idx = 0
             self.num_layers = 0
             logger.warning(f"Rank {self.pipeline_rank}: No layers assigned!")
-        
+
         # Replace unused layers with IdentityBlock to free resources
         for idx in range(self.end_idx, total_layers):
             self.layers[idx] = IdentityBlock()
         for idx in range(self.start_idx):
             self.layers[idx] = IdentityBlock()
-        
-        logger.info(f"Rank {self.pipeline_rank}: Memory-aware sharding complete. "
-                   f"Using layers {self.start_idx}-{self.end_idx-1} ({self.num_layers} layers)")
-    
+
+        logger.info(
+            f"Rank {self.pipeline_rank}: Memory-aware sharding complete. "
+            f"Using layers {self.start_idx}-{self.end_idx - 1} ({self.num_layers} layers)"
+        )
+
     def _setup_traditional_pipeline(self, group):
         """Setup pipeline using traditional equal layer distribution."""
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         total_layers = len(self.layers)
         base = total_layers // self.pipeline_size
         extra = total_layers % self.pipeline_size
-        
+
         # compute number of layers for this rank (reverse ordering)
         layers_this = base + (1 if self.pipeline_rank < extra else 0)
-        
+
         # start index in reversed allocation: rank 0 gets the last slice
         self.start_idx = (self.pipeline_size - self.pipeline_rank - 1) * base + min(
             extra, self.pipeline_size - self.pipeline_rank - 1
         )
         self.end_idx = self.start_idx + layers_this
-        
+
         # protect against overflow
         self.start_idx = max(self.start_idx, 0)
         self.end_idx = min(self.end_idx, total_layers)
-        
+
         # replace unused layers with IdentityBlock to free resources
         for idx in range(self.end_idx, total_layers):
             self.layers[idx] = IdentityBlock()
         for idx in range(self.start_idx):
             self.layers[idx] = IdentityBlock()
-        
+
         # compute number of layers this rank will execute
         self.num_layers = max(self.end_idx - self.start_idx, 0)
-        
-        logger.info(f"Rank {self.pipeline_rank}: Traditional sharding complete. "
-                   f"Using layers {self.start_idx}-{self.end_idx-1} ({self.num_layers} layers)")
+
+        logger.info(
+            f"Rank {self.pipeline_rank}: Traditional sharding complete. "
+            f"Using layers {self.start_idx}-{self.end_idx - 1} ({self.num_layers} layers)"
+        )
 
     # --- Forward ---
     def __call__(
