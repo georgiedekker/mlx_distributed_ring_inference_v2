@@ -14,15 +14,61 @@ jobs:
     runs-on: [self-hosted, linux, arm64]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: false
+          enable-cache: true
           python-version: "3.12"
 
-      - name: Run ruff linter
+      - name: Run ruff linter (check only)
         run: uvx ruff check *.py distributed/ config/
 
-      - name: Run ruff formatter check
+      - name: Run ruff formatter (check only)
         run: uvx ruff format --check *.py distributed/ config/
+
+      - name: Security scan - detect secrets
+        run: |
+          uvx detect-secrets scan *.py
+
+      - name: Security scan - pip-audit
+        run: uvx pip-audit --ignore-vuln GHSA-wj6h-64fc-37mp
+
+  # ============================================
+  # Stage 1.5: Auto-format (only on main, after lint passes)
+  # ============================================
+  auto-format:
+    name: Auto-format Code
+    needs: lint
+    runs-on: [self-hosted, linux, arm64]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Run ruff linter with auto-fix
+        run: uvx ruff check --fix *.py distributed/ config/
+
+      - name: Run ruff formatter
+        run: uvx ruff format *.py distributed/ config/
+
+      - name: Commit formatting changes if any
+        run: |
+          git config --local user.email "ci-bot@nonagenticai.com"
+          git config --local user.name "CI Bot"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "style: auto-format with ruff [skip ci]"
+            git push
+          fi
