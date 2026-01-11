@@ -132,6 +132,16 @@ async def health():
     }
 
 
+@app.get("/health/live")
+async def health_live():
+    """Kubernetes liveness probe endpoint.
+
+    Returns:
+        dict: Liveness status
+    """
+    return {"status": "alive"}
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information.
