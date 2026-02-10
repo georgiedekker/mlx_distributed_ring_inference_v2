@@ -18,11 +18,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff>=0.1.0",
-    "mypy>=1.0.0",
 ]
 
 [dependency-groups]
 dev = [
+    "ty>=0.0.15",
     "urllib3>=2.6.3",
     "werkzeug>=3.1.5",
 ]
@@ -41,8 +41,8 @@ target-version = "py310"
 [tool.local-ci]
 skip_tests = true  # Requires Apple Silicon (MLX) - tests run manually on mini1/mini2
 
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-ignore_missing_imports = true
+[tool.ty.environment]
+python-version = "3.10"
+
+[tool.ty.rules]
+unresolved-import = "ignore"

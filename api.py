@@ -18,7 +18,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from config import get_config
 
@@ -42,7 +42,7 @@ app = FastAPI(
 # Add CORS middleware if enabled
 if config.api.enable_cors:
     app.add_middleware(
-        CORSMiddleware,
+        CORSMiddleware,  # type: ignore[arg-type]
         allow_origins=config.api.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
@@ -57,15 +57,17 @@ class ChatMessage(BaseModel):
     role: str = Field(..., description="Role of the message sender (user/assistant/system)")
     content: str = Field(..., description="Content of the message")
 
-    @validator("role")
-    def validate_role(cls, v):
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
         """Validate that role is one of the allowed values."""
         if v not in ["user", "assistant", "system"]:
             raise ValueError("Role must be one of: user, assistant, system")
         return v
 
-    @validator("content")
-    def validate_content(cls, v):
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, v: str) -> str:
         """Validate that content is not empty."""
         if not v or not v.strip():
             raise ValueError("Content cannot be empty")
@@ -90,8 +92,9 @@ class ChatRequest(BaseModel):
         default=None, description="Optional conversation ID for caching"
     )
 
-    @validator("messages")
-    def validate_messages(cls, v):
+    @field_validator("messages")
+    @classmethod
+    def validate_messages(cls, v: List["ChatMessage"]) -> List["ChatMessage"]:
         """Validate that messages list is not empty."""
         if not v:
             raise ValueError("Messages list cannot be empty")
@@ -288,6 +291,8 @@ async def chat_completions(req: ChatRequest):
         raise
 
     # Check for error in response
+    if response_data is None:
+        raise HTTPException(status_code=504, detail="No response from server")
     if "error" in response_data:
         error_msg = response_data.get("error", "Unknown error")
         logger.error(f"Server returned error: {error_msg}")
@@ -320,9 +325,11 @@ async def chat_completions(req: ChatRequest):
         },
     )
 
+    usage = response.usage or {}
+    perf = response.performance or {}
     logger.info(
-        f"Request completed: {response.usage['completion_tokens']} tokens @ "
-        f"{response.performance['eval_tokens_per_second']:.1f} tok/s"
+        f"Request completed: {usage.get('completion_tokens', 0)} tokens @ "
+        f"{perf.get('eval_tokens_per_second', 0):.1f} tok/s"
     )
 
     return response

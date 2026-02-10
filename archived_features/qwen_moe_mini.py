@@ -41,7 +41,6 @@ the normalized hidden state for the language‑model head.
 
 from dataclasses import dataclass, field
 from typing import Optional, List
-import math
 import os
 
 import mlx.core as mx
@@ -260,7 +259,7 @@ class QwenMoEMiniModel(nn.Module):
         self.num_layers: int = self.num_hidden_layers
 
     # --- Pipeline API ---
-    def pipeline(self, group, use_memory_aware: bool = None):
+    def pipeline(self, group, use_memory_aware: Optional[bool] = None):
         """Split layers across ranks and prepare for pipelined inference.
 
         Each rank receives a contiguous slice of `self.layers` in reverse
@@ -276,7 +275,6 @@ class QwenMoEMiniModel(nn.Module):
 
         self.pipeline_rank = group.rank()
         self.pipeline_size = group.size()
-        total_layers = len(self.layers)
 
         # Determine whether to use memory-aware sharding
         if use_memory_aware is None:
@@ -498,7 +496,7 @@ class Model(nn.Module):
         self.pipeline_rank: int = 0
         self.pipeline_size: int = 1
 
-    def pipeline(self, group, use_memory_aware: bool = None):
+    def pipeline(self, group, use_memory_aware: Optional[bool] = None):
         """Apply pipeline parallelism to the underlying model."""
         self.model.pipeline(group, use_memory_aware)
         self.pipeline_rank = self.model.pipeline_rank
@@ -540,9 +538,9 @@ class Model(nn.Module):
             ):
                 shard_state_dict[key] = value
         # Stack expert weights if needed
-        for l in range(self.args.num_hidden_layers):
-            if self.args.shard.start_layer <= l <= self.args.shard.end_layer:
-                prefix = f"model.layers.{l}.mlp"
+        for layer_idx in range(self.args.num_hidden_layers):
+            if self.args.shard.start_layer <= layer_idx <= self.args.shard.end_layer:
+                prefix = f"model.layers.{layer_idx}.mlp"
                 for expert_type in ["experts"]:
                     for param in ["weight"]:
                         expert_keys = [

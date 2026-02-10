@@ -1,0 +1,373 @@
+═══════════════════════════════════════════════════════════════
+LOCAL CI - COMMIT MODE
+Repo: mlx_distributed_ring_inference_v2
+Time: 2026-02-10 22:07:45
+═══════════════════════════════════════════════════════════════
+
+
+───────────────────────────────────────────────────────────────
+[RUFF LINT]
+───────────────────────────────────────────────────────────────
+E722 Do not use bare `except`
+   --> archived_features/base.py:372:17
+    |
+370 |                     layer_num = int(name.split(".")[-1])
+371 |                     num_layers = max(num_layers, layer_num + 1)
+372 |                 except:
+    |                 ^^^^^^
+373 |                     pass
+    |
+
+F841 Local variable `intermediate_size` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:251:5
+    |
+249 |     """Estimate parameter count from model configuration as fallback."""
+250 |     hidden_size = config.hidden_size
+251 |     intermediate_size = config.intermediate_size
+    |     ^^^^^^^^^^^^^^^^^
+252 |     num_heads = config.num_attention_heads
+253 |     n_experts = config.n_routed_experts
+    |
+help: Remove assignment to unused variable `intermediate_size`
+
+F841 Local variable `num_heads` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:252:5
+    |
+250 |     hidden_size = config.hidden_size
+251 |     intermediate_size = config.intermediate_size
+252 |     num_heads = config.num_attention_heads
+    |     ^^^^^^^^^
+253 |     n_experts = config.n_routed_experts
+254 |     n_shared = config.n_shared_experts
+    |
+help: Remove assignment to unused variable `num_heads`
+
+F841 Local variable `intermediate_size` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:332:5
+    |
+330 |     # Estimate activation memory for MoE layer
+331 |     hidden_size = config.hidden_size
+332 |     intermediate_size = config.intermediate_size
+    |     ^^^^^^^^^^^^^^^^^
+333 |
+334 |     # Self-attention activations
+    |
+help: Remove assignment to unused variable `intermediate_size`
+
+F841 Local variable `total_layers` is assigned to but never used
+   --> archived_features/qwen_moe_mini.py:278:9
+    |
+276 |         self.pipeline_rank = group.rank()
+277 |         self.pipeline_size = group.size()
+278 |         total_layers = len(self.layers)
+    |         ^^^^^^^^^^^^
+279 |
+280 |         # Determine whether to use memory-aware sharding
+    |
+help: Remove assignment to unused variable `total_layers`
+
+E741 Ambiguous variable name: `l`
+   --> archived_features/qwen_moe_mini.py:542:13
+    |
+540 |                 shard_state_dict[key] = value
+541 |         # Stack expert weights if needed
+542 |         for l in range(self.args.num_hidden_layers):
+    |             ^
+543 |             if self.args.shard.start_layer <= l <= self.args.shard.end_layer:
+544 |                 prefix = f"model.layers.{l}.mlp"
+    |
+
+F841 Local variable `metadata` is assigned to but never used
+   --> archived_features/server_with_prompt_cache.py:124:13
+    |
+122 |             # Save using MLX's save_prompt_cache
+123 |             # This would save the KV cache in safetensors format
+124 |             metadata = {
+    |             ^^^^^^^^
+125 |                 "prompt": cached_data["prompt"],
+126 |                 "token_count": len(cached_data["tokens"]),
+    |
+help: Remove assignment to unused variable `metadata`
+
+E722 Do not use bare `except`
+   --> archived_features/server_with_prompt_cache.py:245:17
+    |
+243 |                         f"Processing request (conversation_id={conversation_id}): {prompt[:50]}..."
+244 |                     )
+245 |                 except:
+    |                 ^^^^^^
+246 |                     prompt = None
+    |
+
+E402 Module level import not at top of file
+  --> test_config.py:20:1
+   |
+18 | sys.path.insert(0, str(project_root))
+19 |
+20 | from config import load_config, ConfigValidationError
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+F841 Local variable `config` is assigned to but never used
+   --> test_config.py:138:13
+    |
+137 |         try:
+138 |             config = load_config()
+    |             ^^^^^^
+139 |             print(f"\n✗ {var_name}={var_value}: Should have failed but didn't!")
+140 |             all_passed = False
+    |
+help: Remove assignment to unused variable `config`
+
+Found 10 errors.
+No fixes available (6 hidden fixes can be enabled with the `--unsafe-fixes` option).
+\033[1;33m⚠️  Ruff lint issues found, auto-fixing...\033[0m
+E722 Do not use bare `except`
+   --> archived_features/base.py:372:17
+    |
+370 |                     layer_num = int(name.split(".")[-1])
+371 |                     num_layers = max(num_layers, layer_num + 1)
+372 |                 except:
+    |                 ^^^^^^
+373 |                     pass
+    |
+
+F841 Local variable `intermediate_size` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:251:5
+    |
+249 |     """Estimate parameter count from model configuration as fallback."""
+250 |     hidden_size = config.hidden_size
+251 |     intermediate_size = config.intermediate_size
+    |     ^^^^^^^^^^^^^^^^^
+252 |     num_heads = config.num_attention_heads
+253 |     n_experts = config.n_routed_experts
+    |
+help: Remove assignment to unused variable `intermediate_size`
+
+F841 Local variable `num_heads` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:252:5
+    |
+250 |     hidden_size = config.hidden_size
+251 |     intermediate_size = config.intermediate_size
+252 |     num_heads = config.num_attention_heads
+    |     ^^^^^^^^^
+253 |     n_experts = config.n_routed_experts
+254 |     n_shared = config.n_shared_experts
+    |
+help: Remove assignment to unused variable `num_heads`
+
+F841 Local variable `intermediate_size` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:332:5
+    |
+330 |     # Estimate activation memory for MoE layer
+331 |     hidden_size = config.hidden_size
+332 |     intermediate_size = config.intermediate_size
+    |     ^^^^^^^^^^^^^^^^^
+333 |
+334 |     # Self-attention activations
+    |
+help: Remove assignment to unused variable `intermediate_size`
+
+F841 Local variable `total_layers` is assigned to but never used
+   --> archived_features/qwen_moe_mini.py:278:9
+    |
+276 |         self.pipeline_rank = group.rank()
+277 |         self.pipeline_size = group.size()
+278 |         total_layers = len(self.layers)
+    |         ^^^^^^^^^^^^
+279 |
+280 |         # Determine whether to use memory-aware sharding
+    |
+help: Remove assignment to unused variable `total_layers`
+
+E741 Ambiguous variable name: `l`
+   --> archived_features/qwen_moe_mini.py:542:13
+    |
+540 |                 shard_state_dict[key] = value
+541 |         # Stack expert weights if needed
+542 |         for l in range(self.args.num_hidden_layers):
+    |             ^
+543 |             if self.args.shard.start_layer <= l <= self.args.shard.end_layer:
+544 |                 prefix = f"model.layers.{l}.mlp"
+    |
+
+F841 Local variable `metadata` is assigned to but never used
+   --> archived_features/server_with_prompt_cache.py:124:13
+    |
+122 |             # Save using MLX's save_prompt_cache
+123 |             # This would save the KV cache in safetensors format
+124 |             metadata = {
+    |             ^^^^^^^^
+125 |                 "prompt": cached_data["prompt"],
+126 |                 "token_count": len(cached_data["tokens"]),
+    |
+help: Remove assignment to unused variable `metadata`
+
+E722 Do not use bare `except`
+   --> archived_features/server_with_prompt_cache.py:245:17
+    |
+243 |                         f"Processing request (conversation_id={conversation_id}): {prompt[:50]}..."
+244 |                     )
+245 |                 except:
+    |                 ^^^^^^
+246 |                     prompt = None
+    |
+
+E402 Module level import not at top of file
+  --> test_config.py:20:1
+   |
+18 | sys.path.insert(0, str(project_root))
+19 |
+20 | from config import load_config, ConfigValidationError
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+F841 Local variable `config` is assigned to but never used
+   --> test_config.py:138:13
+    |
+137 |         try:
+138 |             config = load_config()
+    |             ^^^^^^
+139 |             print(f"\n✗ {var_name}={var_value}: Should have failed but didn't!")
+140 |             all_passed = False
+    |
+help: Remove assignment to unused variable `config`
+
+Found 10 errors.
+No fixes available (6 hidden fixes can be enabled with the `--unsafe-fixes` option).
+E722 Do not use bare `except`
+   --> archived_features/base.py:372:17
+    |
+370 |                     layer_num = int(name.split(".")[-1])
+371 |                     num_layers = max(num_layers, layer_num + 1)
+372 |                 except:
+    |                 ^^^^^^
+373 |                     pass
+    |
+
+F841 Local variable `intermediate_size` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:251:5
+    |
+249 |     """Estimate parameter count from model configuration as fallback."""
+250 |     hidden_size = config.hidden_size
+251 |     intermediate_size = config.intermediate_size
+    |     ^^^^^^^^^^^^^^^^^
+252 |     num_heads = config.num_attention_heads
+253 |     n_experts = config.n_routed_experts
+    |
+help: Remove assignment to unused variable `intermediate_size`
+
+F841 Local variable `num_heads` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:252:5
+    |
+250 |     hidden_size = config.hidden_size
+251 |     intermediate_size = config.intermediate_size
+252 |     num_heads = config.num_attention_heads
+    |     ^^^^^^^^^
+253 |     n_experts = config.n_routed_experts
+254 |     n_shared = config.n_shared_experts
+    |
+help: Remove assignment to unused variable `num_heads`
+
+F841 Local variable `intermediate_size` is assigned to but never used
+   --> archived_features/memory_aware_sharding.py:332:5
+    |
+330 |     # Estimate activation memory for MoE layer
+331 |     hidden_size = config.hidden_size
+332 |     intermediate_size = config.intermediate_size
+    |     ^^^^^^^^^^^^^^^^^
+333 |
+334 |     # Self-attention activations
+    |
+help: Remove assignment to unused variable `intermediate_size`
+
+F841 Local variable `total_layers` is assigned to but never used
+   --> archived_features/qwen_moe_mini.py:278:9
+    |
+276 |         self.pipeline_rank = group.rank()
+277 |         self.pipeline_size = group.size()
+278 |         total_layers = len(self.layers)
+    |         ^^^^^^^^^^^^
+279 |
+280 |         # Determine whether to use memory-aware sharding
+    |
+help: Remove assignment to unused variable `total_layers`
+
+E741 Ambiguous variable name: `l`
+   --> archived_features/qwen_moe_mini.py:542:13
+    |
+540 |                 shard_state_dict[key] = value
+541 |         # Stack expert weights if needed
+542 |         for l in range(self.args.num_hidden_layers):
+    |             ^
+543 |             if self.args.shard.start_layer <= l <= self.args.shard.end_layer:
+544 |                 prefix = f"model.layers.{l}.mlp"
+    |
+
+F841 Local variable `metadata` is assigned to but never used
+   --> archived_features/server_with_prompt_cache.py:124:13
+    |
+122 |             # Save using MLX's save_prompt_cache
+123 |             # This would save the KV cache in safetensors format
+124 |             metadata = {
+    |             ^^^^^^^^
+125 |                 "prompt": cached_data["prompt"],
+126 |                 "token_count": len(cached_data["tokens"]),
+    |
+help: Remove assignment to unused variable `metadata`
+
+E722 Do not use bare `except`
+   --> archived_features/server_with_prompt_cache.py:245:17
+    |
+243 |                         f"Processing request (conversation_id={conversation_id}): {prompt[:50]}..."
+244 |                     )
+245 |                 except:
+    |                 ^^^^^^
+246 |                     prompt = None
+    |
+
+E402 Module level import not at top of file
+  --> test_config.py:20:1
+   |
+18 | sys.path.insert(0, str(project_root))
+19 |
+20 | from config import load_config, ConfigValidationError
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+F841 Local variable `config` is assigned to but never used
+   --> test_config.py:138:13
+    |
+137 |         try:
+138 |             config = load_config()
+    |             ^^^^^^
+139 |             print(f"\n✗ {var_name}={var_value}: Should have failed but didn't!")
+140 |             all_passed = False
+    |
+help: Remove assignment to unused variable `config`
+
+Found 10 errors.
+No fixes available (6 hidden fixes can be enabled with the `--unsafe-fixes` option).
+\033[0;31m❌ Some issues could not be auto-fixed\033[0m
+   Run 'uv run ruff check .' to see remaining issues
+
+───────────────────────────────────────────────────────────────
+[RUFF FORMAT]
+───────────────────────────────────────────────────────────────
+12 files left unchanged
+\033[0;32m✅ All files already formatted\033[0m
+
+───────────────────────────────────────────────────────────────
+[TY (warnings only)]
+───────────────────────────────────────────────────────────────
+All checks passed!
+\033[0;32m✅ ty passed\033[0m
+
+═══════════════════════════════════════════════════════════════
+\033[0;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m
+\033[0;31m  ✗ COMMIT BLOCKED\033[0m
+\033[0;31m  See: .local-ci-commit.txt\033[0m
+\033[0;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m
+
+Claude you fucked up, be ashamed and fix your fucking code now!
+RESULT: FAILED

@@ -1,0 +1,30 @@
+═══════════════════════════════════════════════════════════════
+LOCAL CI - PUSH MODE (guarded tests)
+Repo: mlx_distributed_ring_inference_v2
+Time: 2026-02-10 22:07:46
+═══════════════════════════════════════════════════════════════
+
+
+⚠️  WARNING: You have uncommitted changes!
+   The hook checks your WORKING DIRECTORY but pushes COMMITTED code.
+   If your uncommitted changes fix lint/test issues, CI will still fail.
+
+   Uncommitted files:
+
+api.py
+archived_features/base.py
+archived_features/memory_aware_sharding.py
+archived_features/qwen_moe_mini.py
+archived_features/server_with_prompt_cache.py
+archived_features/shard.py
+distributed/utils.py
+pyproject.toml
+server.py
+uv.lock
+
+❌ PUSH BLOCKED - commit your changes first!
+
+   Options:
+   1. git add -A && git commit -m 'message'  (commit changes)
+   2. git stash                              (stash if not ready)
+   3. Claude you fucked up, be ashamed and fix your fucking code now!

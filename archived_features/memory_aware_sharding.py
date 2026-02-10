@@ -18,10 +18,8 @@ Key features:
 import os
 import subprocess
 import logging
-import math
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional, Union
-import mlx.core as mx
+from typing import Dict, List, Tuple, Optional
 import mlx.nn as nn
 from mlx.utils import tree_flatten
 
@@ -142,7 +140,7 @@ def get_available_memory_mb() -> int:
     return 8192  # 8GB fallback
 
 
-def parse_memory_config() -> Dict[int, int]:
+def parse_memory_config() -> Dict[int | str, int]:
     """Parse per-rank memory configuration from environment variables.
 
     Environment variables:
@@ -178,7 +176,9 @@ def parse_memory_config() -> Dict[int, int]:
     return memory_config
 
 
-def get_rank_memory_info(rank: int, world_size: int, memory_config: Dict[int, int]) -> MemoryInfo:
+def get_rank_memory_info(
+    rank: int, world_size: int, memory_config: Dict[int | str, int]
+) -> MemoryInfo:
     """Get memory information for a specific rank.
 
     Args:
@@ -248,8 +248,6 @@ def get_rank_memory_info(rank: int, world_size: int, memory_config: Dict[int, in
 def estimate_layer_params_from_config(config) -> int:
     """Estimate parameter count from model configuration as fallback."""
     hidden_size = config.hidden_size
-    intermediate_size = config.intermediate_size
-    num_heads = config.num_attention_heads
     n_experts = config.n_routed_experts
     n_shared = config.n_shared_experts
     moe_intermediate = config.moe_intermediate_size
@@ -300,7 +298,6 @@ def estimate_layer_memory(
         LayerEstimate with memory breakdown
     """
     # Estimate parameter memory using MLX tree_flatten
-    from mlx.utils import tree_flatten
 
     param_count = 0
 
@@ -309,11 +306,11 @@ def estimate_layer_memory(
         flattened_params = tree_flatten(layer.parameters())
         for name, param in flattened_params:
             if hasattr(param, "size"):
-                param_count += param.size
+                param_count += int(getattr(param, "size"))
             elif hasattr(param, "shape"):
                 import math
 
-                param_count += math.prod(param.shape)
+                param_count += int(math.prod(getattr(param, "shape")))
             else:
                 # Try to estimate from shape info if available
                 param_str = str(param)
@@ -330,7 +327,6 @@ def estimate_layer_memory(
 
     # Estimate activation memory for MoE layer
     hidden_size = config.hidden_size
-    intermediate_size = config.intermediate_size
 
     # Self-attention activations
     # Q, K, V projections + attention scores + output

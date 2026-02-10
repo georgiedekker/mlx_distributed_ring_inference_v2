@@ -74,6 +74,7 @@ def broadcast_prompt(
     if has_work.item() > 0:
         # Broadcast prompt length
         if rank == 0:
+            assert prompt is not None
             prompt_bytes = prompt.encode("utf-8")
             prompt_len = len(prompt_bytes)
             params = mx.array([float(prompt_len), float(max_tokens)])
@@ -246,7 +247,7 @@ def shard_and_load(repo: str, config: Any = None, adapter_path: str = "") -> Tup
 
     # Synchronize all processes
     try:
-        mx.eval(dist.all_sum(mx.array(1.0), stream=mx.cpu))
+        mx.eval(dist.all_sum(mx.array(1.0), stream=mx.cpu))  # type: ignore[arg-type]
     except Exception as e:
         raise RuntimeError(f"Failed to synchronize processes: {e}")
 

@@ -11,11 +11,8 @@ import logging
 import os
 import resource
 import time
-from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-import mlx.core as mx
-import mlx.core.distributed as dist
 from mlx_lm import stream_generate
 
 from config import get_config
@@ -190,7 +187,7 @@ def main():
     logger.info(f"Model loaded, world size: {world_size}")
 
     # Simple conversation cache for rank 0
-    cache: Dict[str, Tuple[str, str]] = {} if rank == 0 else None
+    cache: Optional[Dict[str, Tuple[str, str]]] = {} if rank == 0 else None
 
     # Main server loop - ALL ranks participate
     while True:
@@ -210,6 +207,7 @@ def main():
                 conversation_id = request.get("conversation_id", "default")
 
                 # Check cache
+                assert cache is not None
                 if conversation_id in cache:
                     cached_prompt, _ = cache[conversation_id]
                     if prompt.startswith(cached_prompt):
@@ -280,7 +278,8 @@ def main():
                 )
 
                 # Cache the response
-                cache[conversation_id] = (prompt, response_text)
+                assert cache is not None
+                cache[str(conversation_id)] = (prompt, response_text)
 
                 # Write response with metrics
                 write_response_file(

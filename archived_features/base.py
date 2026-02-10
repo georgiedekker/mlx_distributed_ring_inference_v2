@@ -82,27 +82,46 @@ class KVCache:
         else:
             if isinstance(self.keys, list) and isinstance(new_keys, list):
                 # List-based cache (for multi-layer models)
+                assert isinstance(self.values, list)
                 for i, (k, v) in enumerate(zip(new_keys, new_values)):
                     if k is not None and v is not None:
-                        if i < len(self.keys) and self.keys[i] is not None:
-                            self.keys[i] = mx.concatenate([self.keys[i], k], axis=2)
-                            self.values[i] = mx.concatenate([self.values[i], v], axis=2)
+                        ki = self.keys[i] if i < len(self.keys) else None
+                        if ki is not None:
+                            self.keys[i] = mx.concatenate([ki, k], axis=2)
+                            vi = self.values[i]
+                            assert vi is not None
+                            self.values[i] = mx.concatenate([vi, v], axis=2)
                         else:
                             if i >= len(self.keys):
                                 # Extend lists if needed
-                                self.keys.extend([None] * (i - len(self.keys) + 1))
-                                self.values.extend([None] * (i - len(self.values) + 1))
+                                self.keys.extend([None] * (i - len(self.keys) + 1))  # type: ignore[list-item]
+                                self.values.extend([None] * (i - len(self.values) + 1))  # type: ignore[list-item]
                             self.keys[i] = k
                             self.values[i] = v
             else:
                 # Tensor-based cache
+                assert not isinstance(self.keys, list)
+                assert not isinstance(self.values, list)
+                assert self.keys is not None
+                assert self.values is not None
+                append_keys: Optional[mx.array]
+                append_values: Optional[mx.array]
                 if isinstance(new_keys, list):
-                    new_keys = new_keys[0] if new_keys else None
-                    new_values = new_values[0] if new_values else None
+                    append_keys = new_keys[0] if new_keys else None
+                    append_values = (
+                        new_values[0] if isinstance(new_values, list) and new_values else None
+                    )
+                else:
+                    append_keys = new_keys
+                    append_values = (
+                        new_values
+                        if not isinstance(new_values, list)
+                        else (new_values[0] if new_values else None)
+                    )
 
-                if new_keys is not None and new_values is not None:
-                    self.keys = mx.concatenate([self.keys, new_keys], axis=2)
-                    self.values = mx.concatenate([self.values, new_values], axis=2)
+                if append_keys is not None and append_values is not None:
+                    self.keys = mx.concatenate([self.keys, append_keys], axis=2)
+                    self.values = mx.concatenate([self.values, append_values], axis=2)
 
         # Update offset
         if isinstance(new_keys, list):
@@ -130,15 +149,22 @@ class KVCache:
 
         if isinstance(self.keys, list):
             # List-based cache
+            assert isinstance(self.values, list)
             for i in range(len(self.keys)):
-                if self.keys[i] is not None:
-                    current_size = self.keys[i].shape[2]
+                ki = self.keys[i]
+                if ki is not None:
+                    current_size = ki.shape[2]
                     if length < current_size:
-                        self.keys[i] = self.keys[i][:, :, :length, :]
-                        self.values[i] = self.values[i][:, :, :length, :]
+                        self.keys[i] = ki[:, :, :length, :]
+                        vi = self.values[i]
+                        assert vi is not None
+                        self.values[i] = vi[:, :, :length, :]
         else:
             # Tensor-based cache
             if self.keys is not None:
+                assert self.values is not None
+                assert not isinstance(self.keys, list)
+                assert not isinstance(self.values, list)
                 current_size = self.keys.shape[2]
                 if length < current_size:
                     self.keys = self.keys[:, :, :length, :]
@@ -162,13 +188,20 @@ class KVCache:
 
         if isinstance(self.keys, list):
             # List-based cache
+            assert isinstance(self.values, list)
             for i in range(len(self.keys)):
-                if self.keys[i] is not None:
-                    self.keys[i] = self.keys[i][:, :, remove_count:, :]
-                    self.values[i] = self.values[i][:, :, remove_count:, :]
+                ki = self.keys[i]
+                if ki is not None:
+                    self.keys[i] = ki[:, :, remove_count:, :]
+                    vi = self.values[i]
+                    assert vi is not None
+                    self.values[i] = vi[:, :, remove_count:, :]
         else:
             # Tensor-based cache
             if self.keys is not None:
+                assert self.values is not None
+                assert not isinstance(self.keys, list)
+                assert not isinstance(self.values, list)
                 self.keys = self.keys[:, :, remove_count:, :]
                 self.values = self.values[:, :, remove_count:, :]
 
@@ -188,9 +221,14 @@ class KVCache:
 
         if not self.is_empty:
             if isinstance(self.keys, list):
+                assert isinstance(self.values, list)
                 new_cache.keys = [mx.array(k) if k is not None else None for k in self.keys]
                 new_cache.values = [mx.array(v) if v is not None else None for v in self.values]
             else:
+                assert self.keys is not None
+                assert self.values is not None
+                assert not isinstance(self.keys, list)
+                assert not isinstance(self.values, list)
                 new_cache.keys = mx.array(self.keys)
                 new_cache.values = mx.array(self.values)
 
@@ -210,11 +248,16 @@ class KVCache:
 
         if not self.is_empty:
             if isinstance(self.keys, list):
+                assert isinstance(self.values, list)
                 # Convert arrays to lists for serialization
                 state["keys"] = [k.tolist() if k is not None else None for k in self.keys]
                 state["values"] = [v.tolist() if v is not None else None for v in self.values]
                 state["is_list_cache"] = True
             else:
+                assert self.keys is not None
+                assert self.values is not None
+                assert not isinstance(self.keys, list)
+                assert not isinstance(self.values, list)
                 state["keys"] = self.keys.tolist()
                 state["values"] = self.values.tolist()
                 state["is_list_cache"] = False
@@ -326,7 +369,7 @@ def make_kv_caches(
                 try:
                     layer_num = int(name.split(".")[-1])
                     num_layers = max(num_layers, layer_num + 1)
-                except:
+                except (ValueError, IndexError):
                     pass
 
         if num_layers == 0:
@@ -546,6 +589,8 @@ def get_cache_stats(caches: List[Optional[KVCache]]) -> Dict[str, Any]:
                         stats["memory_usage_mb"] += (k.nbytes + v.nbytes) / (1024 * 1024)
             else:
                 if cache.keys is not None and cache.values is not None:
+                    assert not isinstance(cache.keys, list)
+                    assert not isinstance(cache.values, list)
                     stats["memory_usage_mb"] += (cache.keys.nbytes + cache.values.nbytes) / (
                         1024 * 1024
                     )

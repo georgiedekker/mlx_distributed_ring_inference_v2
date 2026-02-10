@@ -17,7 +17,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from config import load_config, ConfigValidationError
+from config import load_config, ConfigValidationError  # noqa: E402
 
 
 def test_default_config():
@@ -135,7 +135,7 @@ def test_validation():
         os.environ[var_name] = var_value
 
         try:
-            config = load_config()
+            load_config()
             print(f"\n✗ {var_name}={var_value}: Should have failed but didn't!")
             all_passed = False
         except ConfigValidationError as e:

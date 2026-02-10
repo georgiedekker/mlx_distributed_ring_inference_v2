@@ -10,16 +10,16 @@ import os
 import resource
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Optional, List
 import hashlib
 
 import mlx.core as mx
 import mlx.core.distributed as dist
 from huggingface_hub import snapshot_download
 from mlx.utils import tree_flatten
-from mlx_lm import stream_generate, generate
+from mlx_lm import stream_generate
 from mlx_lm.utils import load_model, load_tokenizer
-from mlx_lm.models.cache import make_prompt_cache, save_prompt_cache, load_prompt_cache
+from mlx_lm.models.cache import make_prompt_cache
 
 # Increase file descriptor limit
 resource.setrlimit(resource.RLIMIT_NOFILE, (2048, 4096))
@@ -121,7 +121,7 @@ class AdvancedPromptCache:
         if cache_object:
             # Save using MLX's save_prompt_cache
             # This would save the KV cache in safetensors format
-            metadata = {
+            _metadata = {
                 "prompt": cached_data["prompt"],
                 "token_count": len(cached_data["tokens"]),
                 "timestamp": str(cached_data["timestamp"]),
@@ -191,7 +191,7 @@ def shard_and_load(repo):
     mx.eval(model.parameters())
 
     # Synchronize
-    mx.eval(dist.all_sum(mx.array(1.0), stream=mx.cpu))
+    mx.eval(dist.all_sum(mx.array(1.0), stream=mx.cpu))  # type: ignore[arg-type]
 
     return model, tokenizer, rank, world_size, group
 
@@ -242,7 +242,7 @@ def main():
                     logger.info(
                         f"Processing request (conversation_id={conversation_id}): {prompt[:50]}..."
                     )
-                except:
+                except Exception:
                     prompt = None
 
         # Broadcast whether we have work
@@ -257,6 +257,7 @@ def main():
         if has_work.item() > 0:
             # Broadcast prompt length and conversation_id length
             if rank == 0:
+                assert prompt is not None
                 prompt_bytes = prompt.encode("utf-8")
                 prompt_len = len(prompt_bytes)
                 conv_id_bytes = (conversation_id or "").encode("utf-8")
@@ -325,7 +326,7 @@ def main():
                         f"Cache optimization: reusing {reused_tokens} tokens from previous prompt"
                     )
                 else:
-                    logger.info(f"No cache reuse available, computing full prompt")
+                    logger.info("No cache reuse available, computing full prompt")
 
             # ALL ranks generate together with cache
             start_time = time.time()

@@ -33,7 +33,7 @@ class Shard:
     def get_layer_count(self) -> int:
         return self.end_layer - self.start_layer + 1
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> Dict[str, int | str]:
         return {
             "model_id": self.model_id,
             "start_layer": self.start_layer,
