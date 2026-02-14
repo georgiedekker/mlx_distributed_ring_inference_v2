@@ -1,7 +1,7 @@
 ═══════════════════════════════════════════════════════════════
 LOCAL CI - PUSH MODE (guarded tests)
 Repo: mlx_distributed_ring_inference_v2
-Time: 2026-02-11 11:51:54
+Time: 2026-02-14 12:39:23
 ═══════════════════════════════════════════════════════════════
 
 Pushing: refs/heads/main -> refs/heads/main
