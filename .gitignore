@@ -57,3 +57,5 @@ test_*.py
 !CHANGELOG.md
 !REFACTORING_SUMMARY.md
 !LICENSE
+.local-ci-commit.txt
+.local-ci-push.txt
