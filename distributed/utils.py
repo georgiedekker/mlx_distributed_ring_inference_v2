@@ -199,11 +199,11 @@ def shard_and_load(repo: str, config: Any = None, adapter_path: str = "") -> Tup
         f"[Rank {rank}] Before sharding: model has {len(list(model.parameters()))} parameters"
     )
 
-    # Apply pipeline sharding - this MUST distribute layers evenly
+    # Apply tensor sharding - distributes attention heads and MLP across ranks
     try:
-        model.model.pipeline(group)
+        model.shard(group)
     except Exception as e:
-        raise RuntimeError(f"Failed to apply pipeline sharding: {e}")
+        raise RuntimeError(f"Failed to apply sharding: {e}")
 
     logger.info(
         f"[Rank {rank}] After sharding: model has {len(list(model.parameters()))} parameters"
@@ -240,7 +240,7 @@ def shard_and_load(repo: str, config: Any = None, adapter_path: str = "") -> Tup
     # Load and shard the model with weights
     try:
         model, _ = load_model(model_path, lazy=True, strict=False)
-        model.model.pipeline(group)
+        model.shard(group)
         mx.eval(model.parameters())
     except Exception as e:
         raise RuntimeError(f"Failed to load and shard model with weights: {e}")

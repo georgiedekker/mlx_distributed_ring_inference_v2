@@ -45,10 +45,10 @@ start_servers() {
     # Clean up
     rm -f server.log api.log
     
-    # Create simple hosts.json (mini2 = master, mini1 = worker)
+    # Create simple hosts.json (mini2 = master/local, mini1 = worker)
     cat > hosts.json << 'EOF'
 [
-    {"ssh": "localhost", "ips": ["192.168.5.2"]},
+    {"ssh": "127.0.0.1", "ips": ["192.168.5.2"]},
     {"ssh": "mini1@192.168.5.1", "ips": ["192.168.5.1"]}
 ]
 EOF
@@ -69,7 +69,7 @@ EOF
     echo -e "${YELLOW}Starting distributed server...${NC}"
     
     # Launch with MLX
-    mlx.launch --hostfile hosts.json --backend ring --verbose python3 server.py >> server.log 2>&1 &
+    mlx.launch --hostfile hosts.json --backend ring --verbose --cwd /Users/mini1/Movies/mlx_distributed_ring_inference_v2 python3 server.py >> server.log 2>&1 &
     
     echo $! > .server.pid
     
