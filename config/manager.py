@@ -178,6 +178,7 @@ class DistributedConfig:
 class FilePathsConfig:
     """File paths for IPC and logging."""
 
+    socket_path: str = "/tmp/mlx_ring.sock"
     request_file_path: str = "/tmp/mlx_request.json"
     response_file_path: str = "/tmp/mlx_response.json"
     server_log_path: str = "server.log"
@@ -340,6 +341,7 @@ class Config:
         )
 
         file_paths_config = FilePathsConfig(
+            socket_path=os.getenv("SOCKET_PATH", "/tmp/mlx_ring.sock"),
             request_file_path=os.getenv("REQUEST_FILE_PATH", "/tmp/mlx_request.json"),
             response_file_path=os.getenv("RESPONSE_FILE_PATH", "/tmp/mlx_response.json"),
             server_log_path=os.getenv("SERVER_LOG_PATH", "server.log"),
@@ -362,6 +364,125 @@ class Config:
             file_paths=file_paths_config,
             system=system_config,
         )
+
+
+# =========================================================================
+# Facade classes — bridge the attribute names used in server.py / api.py
+# to the actual Config field names.
+# =========================================================================
+
+
+class _PathsFacade:
+    """Convenience accessor: ``config.paths.request_file`` etc."""
+
+    __slots__ = ("_fp",)
+
+    def __init__(self, fp: FilePathsConfig) -> None:
+        self._fp = fp
+
+    @property
+    def request_file(self) -> str:
+        return self._fp.request_file_path
+
+    @property
+    def response_file(self) -> str:
+        return self._fp.response_file_path
+
+    @property
+    def socket_path(self) -> str:
+        return self._fp.socket_path
+
+
+class _ApiFacade:
+    """Convenience accessor: ``config.api.host`` etc."""
+
+    __slots__ = ("_net",)
+
+    def __init__(self, net: NetworkConfig) -> None:
+        self._net = net
+
+    @property
+    def host(self) -> str:
+        return self._net.api_host
+
+    @property
+    def port(self) -> int:
+        return self._net.api_port
+
+    @property
+    def enable_cors(self) -> bool:
+        return True
+
+    @property
+    def cors_origins(self) -> List[str]:
+        return ["*"]
+
+
+class _LoggingFacade:
+    """Convenience accessor: ``config.logging.level`` etc."""
+
+    __slots__ = ("_sys",)
+
+    SIMPLE_FORMAT: str = "%(asctime)s [%(levelname)s] %(message)s"
+    RANK_FORMAT: str = "%(asctime)s [%(levelname)s] [rank %(rank)s] %(message)s"
+
+    def __init__(self, sys_cfg: SystemConfig) -> None:
+        self._sys = sys_cfg
+
+    @property
+    def level(self) -> str:
+        return self._sys.log_level
+
+    @property
+    def simple_format(self) -> str:
+        return self.SIMPLE_FORMAT
+
+    @property
+    def format(self) -> str:
+        return self.RANK_FORMAT
+
+
+# --- Compatibility properties on existing dataclasses -------------------
+
+# ModelConfig compat
+ModelConfig.default_repo = property(lambda self: self.repo)  # type: ignore[attr-defined]
+
+# PerformanceConfig compat
+PerformanceConfig.poll_interval = property(lambda self: self.poll_interval_seconds)  # type: ignore[attr-defined]
+PerformanceConfig.request_timeout = property(lambda self: self.request_timeout_seconds)  # type: ignore[attr-defined]
+PerformanceConfig.max_prompt_length = property(lambda self: self.max_prompt_len_bytes)  # type: ignore[attr-defined]
+PerformanceConfig.file_descriptor_soft_limit = None  # type: ignore[attr-defined]  # set from Config
+PerformanceConfig.file_descriptor_hard_limit = None  # type: ignore[attr-defined]  # set from Config
+
+# Config facade properties
+Config.paths = property(lambda self: _PathsFacade(self.file_paths))  # type: ignore[attr-defined]
+Config.api = property(lambda self: _ApiFacade(self.network))  # type: ignore[attr-defined]
+Config.logging = property(lambda self: _LoggingFacade(self.system))  # type: ignore[attr-defined]
+
+# Forward performance compat shortcuts that need cross-config access
+_original_config_init = Config.__init__
+
+
+def _config_init_with_compat(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    _original_config_init(self, *args, **kwargs)
+    # Wire cross-config compat: performance.file_descriptor_* → system.*
+    self.performance.__class__.file_descriptor_soft_limit = property(  # type: ignore[attr-defined]
+        lambda perf, _sys=self.system: _sys.file_descriptor_soft_limit
+    )
+    self.performance.__class__.file_descriptor_hard_limit = property(  # type: ignore[attr-defined]
+        lambda perf, _sys=self.system: _sys.file_descriptor_hard_limit
+    )
+    # Wire model.max_prompt_length → performance.max_prompt_len_bytes
+    self.model.__class__.max_prompt_length = property(  # type: ignore[attr-defined]
+        lambda m, _perf=self.performance: _perf.max_prompt_len_bytes
+    )
+    # Wire model.default_max_tokens → performance.default_max_tokens
+    self.model.__class__.default_max_tokens = property(  # type: ignore[attr-defined]
+        lambda m, _perf=self.performance: _perf.default_max_tokens
+    )
+
+
+Config.__init__ = _config_init_with_compat  # type: ignore[method-assign]
 
 
 def load_config(env_file: Optional[str] = None) -> Config:

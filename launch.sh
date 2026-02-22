@@ -21,8 +21,8 @@ stop_servers() {
     # Kill local servers
     pkill -f "python.*server\.py" 2>/dev/null
     
-    # Kill mini2 server
-    ssh mini2@192.168.5.2 "pkill -f 'python.*server\.py'" 2>/dev/null
+    # Kill mini1 worker server
+    ssh mini1@192.168.5.1 "pkill -f 'python.*server\.py'" 2>/dev/null
     
     # Kill API
     if [ -f .api.pid ]; then
@@ -45,24 +45,24 @@ start_servers() {
     # Clean up
     rm -f server.log api.log
     
-    # Create simple hosts.json
+    # Create simple hosts.json (mini2 = master, mini1 = worker)
     cat > hosts.json << 'EOF'
 [
-    {"ssh": "localhost", "ips": ["192.168.5.1"]},
-    {"ssh": "mini2@192.168.5.2", "ips": ["192.168.5.2"]}
+    {"ssh": "localhost", "ips": ["192.168.5.2"]},
+    {"ssh": "mini1@192.168.5.1", "ips": ["192.168.5.1"]}
 ]
 EOF
-    
-    # Sync server, config, and distributed utils to mini2
-    echo "Syncing files to mini2..."
-    scp server.py mini2@192.168.5.2:/Users/Shared/mlx_distributed_ring_inference_v2/
-    scp -r config mini2@192.168.5.2:/Users/Shared/mlx_distributed_ring_inference_v2/
-    scp -r distributed mini2@192.168.5.2:/Users/Shared/mlx_distributed_ring_inference_v2/
+
+    # Sync server, config, and distributed utils to mini1
+    echo "Syncing files to mini1..."
+    scp server.py mini1@192.168.5.1:/Users/mini1/Movies/mlx_distributed_ring_inference_v2/
+    scp -r config mini1@192.168.5.1:/Users/mini1/Movies/mlx_distributed_ring_inference_v2/
+    scp -r distributed mini1@192.168.5.1:/Users/mini1/Movies/mlx_distributed_ring_inference_v2/
 
     # Sync .env if it exists (optional configuration)
     if [ -f .env ]; then
         echo "Syncing .env configuration..."
-        scp .env mini2@192.168.5.2:/Users/Shared/mlx_distributed_ring_inference_v2/
+        scp .env mini1@192.168.5.1:/Users/mini1/Movies/mlx_distributed_ring_inference_v2/
     fi
     
     echo ""
@@ -106,8 +106,8 @@ check_status() {
     ps aux | grep -E "(server\.py|api\.py)" | grep -v grep || echo "  None"
     
     echo ""
-    echo "Mini2:"
-    ssh mini2@192.168.5.2 "ps aux | grep 'server\.py' | grep -v grep" || echo "  None"
+    echo "Mini1 (worker):"
+    ssh mini1@192.168.5.1 "ps aux | grep 'server\.py' | grep -v grep" || echo "  None"
     
     echo ""
     if curl -s http://localhost:8100/health > /dev/null 2>&1; then
@@ -135,7 +135,7 @@ test_inference() {
     sleep 1
     echo "CPU usage:"
     ps aux | grep server | grep -v grep | awk '{print "Mini1: " $3 "%"}'
-    ssh mini2@192.168.5.2 "ps aux | grep server | grep -v grep | awk '{print \"Mini2: \" \$3 \"%\"}'"
+    ssh mini1@192.168.5.1 "ps aux | grep server | grep -v grep | awk '{print \"Mini1: \" \$3 \"%\"}'"
     
     wait $CURL_PID
 }
