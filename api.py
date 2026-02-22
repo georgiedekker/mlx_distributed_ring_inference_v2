@@ -9,7 +9,7 @@ Provides a REST API compatible with OpenAI's chat completion format.
 import asyncio
 import json
 import logging
-import os
+import socket
 import time
 import uuid
 from typing import Dict, List, Optional
@@ -145,6 +145,27 @@ async def health_live():
     return {"status": "alive"}
 
 
+@app.get("/model/info")
+async def model_info():
+    """Model information endpoint for MLXModelRegistry compatibility.
+
+    Returns:
+        dict: Model info with top-level fields and a ``models`` list for registry compat
+    """
+    model_entry = {
+        "id": config.model.repo,
+        "model": config.model.repo,
+        "max_context_length": config.kv_cache.max_sequence_length,
+        "max_tokens": config.performance.default_max_tokens,
+        "backend": "distributed_ring",
+        "num_devices": config.distributed.num_devices,
+    }
+    return {
+        **model_entry,
+        "models": [model_entry],
+    }
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information.
@@ -155,71 +176,69 @@ async def root():
     return {
         "name": "MLX Distributed Inference API",
         "version": "1.0.0",
-        "endpoints": {"health": "/health", "chat": "/v1/chat/completions"},
+        "endpoints": {
+            "health": "/health",
+            "model_info": "/model/info",
+            "chat": "/v1/chat/completions",
+        },
     }
 
 
-def check_server_running() -> bool:
-    """Check if the distributed server is running.
-
-    Returns:
-        bool: True if server appears to be running
-    """
-    # Simple heuristic: if request file doesn't exist or is stale, server might not be running
-    # This is not foolproof but provides basic feedback
-    return True  # For now, always return True
-
-
-async def wait_for_response_file(
-    response_file: str, timeout: int, poll_interval: float = 0.1
-) -> Optional[Dict]:
-    """Wait for response file to be created and read it.
+async def send_request_socket(
+    socket_path: str, request_data: Dict, timeout: int
+) -> Dict:
+    """Send request via Unix domain socket and wait for response.
 
     Args:
-        response_file: Path to the response file
+        socket_path: Path to the Unix domain socket
+        request_data: Request dictionary to send
         timeout: Maximum time to wait in seconds
-        poll_interval: How often to check for file in seconds
 
     Returns:
-        Response data dictionary, or None if timeout
+        Response data dictionary
 
     Raises:
-        HTTPException: If file read fails or timeout occurs
+        HTTPException: If connection fails, timeout, or IPC error
     """
-    start_time = time.time()
+    loop = asyncio.get_event_loop()
 
-    while time.time() - start_time < timeout:
-        if os.path.exists(response_file):
-            try:
-                # Small delay to ensure file is fully written
-                await asyncio.sleep(0.05)
+    def _sync_send() -> Dict:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect(socket_path)
+        data = json.dumps(request_data).encode() + b"\n"
+        sock.sendall(data)
+        # Signal end of request
+        sock.shutdown(socket.SHUT_WR)
+        # Read response
+        response_data = b""
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                break
+            response_data += chunk
+        sock.close()
+        return json.loads(response_data.decode().strip())
 
-                with open(response_file, "r") as f:
-                    response_data = json.load(f)
-
-                # Clean up response file
-                try:
-                    os.remove(response_file)
-                except (IOError, OSError) as e:
-                    logger.warning(f"Failed to remove response file: {e}")
-
-                return response_data
-
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse response JSON: {e}")
-                raise HTTPException(status_code=500, detail="Invalid response from server")
-            except (IOError, OSError) as e:
-                logger.error(f"Failed to read response file: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to read response: {str(e)}")
-
-        await asyncio.sleep(poll_interval)
-
-    # Timeout occurred
-    logger.error(f"Timeout waiting for response (timeout={timeout}s)")
-    raise HTTPException(
-        status_code=504,
-        detail=f"Request timeout after {timeout} seconds. Server may be overloaded or not running.",
-    )
+    try:
+        return await loop.run_in_executor(None, _sync_send)
+    except socket.timeout:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Request timeout after {timeout}s. Server may be overloaded.",
+        )
+    except ConnectionRefusedError:
+        raise HTTPException(
+            status_code=503,
+            detail="Inference server not running. Start with ./launch.sh start",
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Socket {socket_path} not found. Inference server not running.",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"IPC error: {e}")
 
 
 @app.post("/v1/chat/completions", response_model=ChatResponse)
@@ -251,44 +270,18 @@ async def chat_completions(req: ChatRequest):
     if req.stream:
         raise HTTPException(status_code=501, detail="Streaming is not currently supported")
 
-    request_file = config.paths.request_file
-    response_file = config.paths.response_file
-
-    # Remove old response file if exists
-    if os.path.exists(response_file):
-        try:
-            os.remove(response_file)
-        except (IOError, OSError) as e:
-            logger.warning(f"Failed to remove old response file: {e}")
-
-    # Write request file
+    # Send request via Unix domain socket
     request_data = {
         "prompt": prompt,
         "max_tokens": req.max_tokens,
         "conversation_id": conversation_id,
     }
 
-    try:
-        with open(request_file, "w") as f:
-            json.dump(request_data, f)
-        logger.debug(f"Request written to {request_file}")
-    except (IOError, OSError) as e:
-        logger.error(f"Failed to write request file: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to write request: {str(e)}")
-
-    # Wait for response with timeout
-    try:
-        response_data = await wait_for_response_file(
-            response_file, config.performance.request_timeout, config.performance.poll_interval
-        )
-    except HTTPException:
-        # Clean up request file if it still exists
-        if os.path.exists(request_file):
-            try:
-                os.remove(request_file)
-            except (IOError, OSError):
-                pass
-        raise
+    response_data = await send_request_socket(
+        config.paths.socket_path,
+        request_data,
+        config.performance.request_timeout,
+    )
 
     # Check for error in response
     if response_data is None:
@@ -376,9 +369,8 @@ def main():
     logger.info(f"Request timeout: {config.performance.request_timeout}s")
     logger.info(f"CORS enabled: {config.api.enable_cors}")
     logger.info("")
-    logger.info("This API communicates with the distributed MLX server via files:")
-    logger.info(f"  - Request file: {config.paths.request_file}")
-    logger.info(f"  - Response file: {config.paths.response_file}")
+    logger.info("This API communicates with the distributed MLX server via Unix socket:")
+    logger.info(f"  - Socket: {config.paths.socket_path}")
     logger.info("")
     logger.info("Make sure the distributed server is running with './launch.sh start'")
     logger.info("=" * 60)
