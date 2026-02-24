@@ -59,3 +59,4 @@ test_*.py
 !LICENSE
 .local-ci-commit.txt
 .local-ci-push.txt
+2
