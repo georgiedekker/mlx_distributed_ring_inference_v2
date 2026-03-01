@@ -184,9 +184,7 @@ async def root():
     }
 
 
-async def send_request_socket(
-    socket_path: str, request_data: Dict, timeout: int
-) -> Dict:
+async def send_request_socket(socket_path: str, request_data: Dict, timeout: int) -> Dict:
     """Send request via Unix domain socket and wait for response.
 
     Args:

@@ -30,6 +30,9 @@ class ModelConfig:
     repo: str = "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-8bit"
     cache_dir: str = ""  # Empty means use HuggingFace default
 
+    # Back-reference for cross-config properties (wired by Config.__post_init__)
+    _performance: Optional["PerformanceConfig"] = field(default=None, init=False, repr=False)
+
     def __post_init__(self):
         """Validate model configuration."""
         if not self.repo:
@@ -41,6 +44,23 @@ class ModelConfig:
             self.cache_dir = self.cache_dir.replace("${USER}", username)
 
         logger.debug(f"Model config: repo={self.repo}, cache_dir={self.cache_dir or 'default'}")
+
+    @property
+    def default_repo(self) -> str:
+        """Alias for repo."""
+        return self.repo
+
+    @property
+    def max_prompt_length(self) -> int:
+        """Delegates to PerformanceConfig.max_prompt_len_bytes."""
+        assert self._performance is not None
+        return self._performance.max_prompt_len_bytes
+
+    @property
+    def default_max_tokens(self) -> int:
+        """Delegates to PerformanceConfig.default_max_tokens."""
+        assert self._performance is not None
+        return self._performance.default_max_tokens
 
 
 @dataclass
@@ -123,6 +143,9 @@ class PerformanceConfig:
     poll_interval_seconds: float = 0.1
     default_max_tokens: int = 50
 
+    # Back-reference for cross-config properties (wired by Config.__post_init__)
+    _system: Optional["SystemConfig"] = field(default=None, init=False, repr=False)
+
     def __post_init__(self):
         """Validate performance configuration."""
         if self.max_prompt_len_bytes < 1:
@@ -150,6 +173,33 @@ class PerformanceConfig:
             f"timeout={self.request_timeout_seconds}s, "
             f"poll={self.poll_interval_seconds}s"
         )
+
+    @property
+    def poll_interval(self) -> float:
+        """Alias for poll_interval_seconds."""
+        return self.poll_interval_seconds
+
+    @property
+    def request_timeout(self) -> int:
+        """Alias for request_timeout_seconds."""
+        return self.request_timeout_seconds
+
+    @property
+    def max_prompt_length(self) -> int:
+        """Alias for max_prompt_len_bytes."""
+        return self.max_prompt_len_bytes
+
+    @property
+    def file_descriptor_soft_limit(self) -> int:
+        """Delegates to SystemConfig.file_descriptor_soft_limit."""
+        assert self._system is not None
+        return self._system.file_descriptor_soft_limit
+
+    @property
+    def file_descriptor_hard_limit(self) -> int:
+        """Delegates to SystemConfig.file_descriptor_hard_limit."""
+        assert self._system is not None
+        return self._system.file_descriptor_hard_limit
 
 
 @dataclass
@@ -247,6 +297,82 @@ class SystemConfig:
         )
 
 
+# =========================================================================
+# Facade classes — bridge the attribute names used in server.py / api.py
+# to the actual Config field names.
+# =========================================================================
+
+
+class _PathsFacade:
+    """Convenience accessor: ``config.paths.request_file`` etc."""
+
+    __slots__ = ("_fp",)
+
+    def __init__(self, fp: FilePathsConfig) -> None:
+        self._fp = fp
+
+    @property
+    def request_file(self) -> str:
+        return self._fp.request_file_path
+
+    @property
+    def response_file(self) -> str:
+        return self._fp.response_file_path
+
+    @property
+    def socket_path(self) -> str:
+        return self._fp.socket_path
+
+
+class _ApiFacade:
+    """Convenience accessor: ``config.api.host`` etc."""
+
+    __slots__ = ("_net",)
+
+    def __init__(self, net: NetworkConfig) -> None:
+        self._net = net
+
+    @property
+    def host(self) -> str:
+        return self._net.api_host
+
+    @property
+    def port(self) -> int:
+        return self._net.api_port
+
+    @property
+    def enable_cors(self) -> bool:
+        return True
+
+    @property
+    def cors_origins(self) -> List[str]:
+        return ["*"]
+
+
+class _LoggingFacade:
+    """Convenience accessor: ``config.logging.level`` etc."""
+
+    __slots__ = ("_sys",)
+
+    SIMPLE_FORMAT: str = "%(asctime)s [%(levelname)s] %(message)s"
+    RANK_FORMAT: str = "%(asctime)s [%(levelname)s] [rank %(rank)s] %(message)s"
+
+    def __init__(self, sys_cfg: SystemConfig) -> None:
+        self._sys = sys_cfg
+
+    @property
+    def level(self) -> str:
+        return self._sys.log_level
+
+    @property
+    def simple_format(self) -> str:
+        return self.SIMPLE_FORMAT
+
+    @property
+    def format(self) -> str:
+        return self.RANK_FORMAT
+
+
 @dataclass
 class Config:
     """Main configuration object containing all settings."""
@@ -258,6 +384,26 @@ class Config:
     distributed: DistributedConfig
     file_paths: FilePathsConfig
     system: SystemConfig
+
+    def __post_init__(self) -> None:
+        """Wire cross-config back-references."""
+        self.performance._system = self.system
+        self.model._performance = self.performance
+
+    @property
+    def paths(self) -> _PathsFacade:
+        """Convenience accessor for file paths."""
+        return _PathsFacade(self.file_paths)
+
+    @property
+    def api(self) -> _ApiFacade:
+        """Convenience accessor for API settings."""
+        return _ApiFacade(self.network)
+
+    @property
+    def logging(self) -> _LoggingFacade:
+        """Convenience accessor for logging settings."""
+        return _LoggingFacade(self.system)
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -364,125 +510,6 @@ class Config:
             file_paths=file_paths_config,
             system=system_config,
         )
-
-
-# =========================================================================
-# Facade classes — bridge the attribute names used in server.py / api.py
-# to the actual Config field names.
-# =========================================================================
-
-
-class _PathsFacade:
-    """Convenience accessor: ``config.paths.request_file`` etc."""
-
-    __slots__ = ("_fp",)
-
-    def __init__(self, fp: FilePathsConfig) -> None:
-        self._fp = fp
-
-    @property
-    def request_file(self) -> str:
-        return self._fp.request_file_path
-
-    @property
-    def response_file(self) -> str:
-        return self._fp.response_file_path
-
-    @property
-    def socket_path(self) -> str:
-        return self._fp.socket_path
-
-
-class _ApiFacade:
-    """Convenience accessor: ``config.api.host`` etc."""
-
-    __slots__ = ("_net",)
-
-    def __init__(self, net: NetworkConfig) -> None:
-        self._net = net
-
-    @property
-    def host(self) -> str:
-        return self._net.api_host
-
-    @property
-    def port(self) -> int:
-        return self._net.api_port
-
-    @property
-    def enable_cors(self) -> bool:
-        return True
-
-    @property
-    def cors_origins(self) -> List[str]:
-        return ["*"]
-
-
-class _LoggingFacade:
-    """Convenience accessor: ``config.logging.level`` etc."""
-
-    __slots__ = ("_sys",)
-
-    SIMPLE_FORMAT: str = "%(asctime)s [%(levelname)s] %(message)s"
-    RANK_FORMAT: str = "%(asctime)s [%(levelname)s] [rank %(rank)s] %(message)s"
-
-    def __init__(self, sys_cfg: SystemConfig) -> None:
-        self._sys = sys_cfg
-
-    @property
-    def level(self) -> str:
-        return self._sys.log_level
-
-    @property
-    def simple_format(self) -> str:
-        return self.SIMPLE_FORMAT
-
-    @property
-    def format(self) -> str:
-        return self.RANK_FORMAT
-
-
-# --- Compatibility properties on existing dataclasses -------------------
-
-# ModelConfig compat
-ModelConfig.default_repo = property(lambda self: self.repo)  # type: ignore[attr-defined]
-
-# PerformanceConfig compat
-PerformanceConfig.poll_interval = property(lambda self: self.poll_interval_seconds)  # type: ignore[attr-defined]
-PerformanceConfig.request_timeout = property(lambda self: self.request_timeout_seconds)  # type: ignore[attr-defined]
-PerformanceConfig.max_prompt_length = property(lambda self: self.max_prompt_len_bytes)  # type: ignore[attr-defined]
-PerformanceConfig.file_descriptor_soft_limit = None  # type: ignore[attr-defined]  # set from Config
-PerformanceConfig.file_descriptor_hard_limit = None  # type: ignore[attr-defined]  # set from Config
-
-# Config facade properties
-Config.paths = property(lambda self: _PathsFacade(self.file_paths))  # type: ignore[attr-defined]
-Config.api = property(lambda self: _ApiFacade(self.network))  # type: ignore[attr-defined]
-Config.logging = property(lambda self: _LoggingFacade(self.system))  # type: ignore[attr-defined]
-
-# Forward performance compat shortcuts that need cross-config access
-_original_config_init = Config.__init__
-
-
-def _config_init_with_compat(self, *args, **kwargs):  # type: ignore[no-untyped-def]
-    _original_config_init(self, *args, **kwargs)
-    # Wire cross-config compat: performance.file_descriptor_* → system.*
-    self.performance.__class__.file_descriptor_soft_limit = property(  # type: ignore[attr-defined]
-        lambda perf, _sys=self.system: _sys.file_descriptor_soft_limit
-    )
-    self.performance.__class__.file_descriptor_hard_limit = property(  # type: ignore[attr-defined]
-        lambda perf, _sys=self.system: _sys.file_descriptor_hard_limit
-    )
-    # Wire model.max_prompt_length → performance.max_prompt_len_bytes
-    self.model.__class__.max_prompt_length = property(  # type: ignore[attr-defined]
-        lambda m, _perf=self.performance: _perf.max_prompt_len_bytes
-    )
-    # Wire model.default_max_tokens → performance.default_max_tokens
-    self.model.__class__.default_max_tokens = property(  # type: ignore[attr-defined]
-        lambda m, _perf=self.performance: _perf.default_max_tokens
-    )
-
-
-Config.__init__ = _config_init_with_compat  # type: ignore[method-assign]
 
 
 def load_config(env_file: Optional[str] = None) -> Config:

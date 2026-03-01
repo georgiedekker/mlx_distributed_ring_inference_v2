@@ -84,7 +84,9 @@ def validate_request(request: Dict) -> Tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def read_request_socket(server_sock: socket.socket) -> Tuple[Optional[Dict], Optional[socket.socket]]:
+def read_request_socket(
+    server_sock: socket.socket,
+) -> Tuple[Optional[Dict], Optional[socket.socket]]:
     """Non-blocking read from Unix domain socket.
 
     Args:
@@ -273,12 +275,16 @@ def main():
                 if rank == 0:
                     print()  # Newline
 
-                    prompt_tokens = getattr(last_response, "prompt_tokens", 0) if last_response else 0
+                    prompt_tokens = (
+                        getattr(last_response, "prompt_tokens", 0) if last_response else 0
+                    )
                     prompt_tps = getattr(last_response, "prompt_tps", 0) if last_response else 0
                     generation_tokens = (
                         getattr(last_response, "generation_tokens", 0) if last_response else 0
                     )
-                    generation_tps = getattr(last_response, "generation_tps", 0) if last_response else 0
+                    generation_tps = (
+                        getattr(last_response, "generation_tps", 0) if last_response else 0
+                    )
 
                     logger.info(f"Generated: '{response_text}'")
                     logger.info(
