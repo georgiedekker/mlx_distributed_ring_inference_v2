@@ -1,13 +1,41 @@
 #!/bin/bash
 
 # Simple distributed inference launcher for mini1 + mini2
+# Auto-detects which machine is local and configures accordingly
 
 RED='\033[0;31m'
-GREEN='\033[0;32m' 
+GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
 ACTION=${1:-start}
+
+# Detect which machine we're running on
+detect_machine() {
+    if ifconfig 2>/dev/null | grep -q "inet 192.168.5.2 "; then
+        # We're on mini2
+        LOCAL_IP="192.168.5.2"
+        REMOTE_IP="192.168.5.1"
+        REMOTE_SSH="mini1@192.168.5.1"
+        REMOTE_CWD="/Users/mini1/Movies/mlx_distributed_ring_inference_v2"
+        LOCAL_NAME="mini2"
+        REMOTE_NAME="mini1"
+    elif ifconfig 2>/dev/null | grep -q "inet 192.168.5.1 "; then
+        # We're on mini1
+        LOCAL_IP="192.168.5.1"
+        REMOTE_IP="192.168.5.2"
+        REMOTE_SSH="mini2@192.168.5.2"
+        REMOTE_CWD="/Users/mini2/Movies/mlx_distributed_ring_inference_v2"
+        LOCAL_NAME="mini1"
+        REMOTE_NAME="mini2"
+    else
+        echo -e "${RED}ERROR: Cannot detect machine. Neither 192.168.5.1 nor 192.168.5.2 found on local interfaces.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Detected: ${LOCAL_NAME} (${LOCAL_IP}) — remote: ${REMOTE_NAME} (${REMOTE_IP})${NC}"
+}
+
+detect_machine
 
 stop_servers() {
     echo -e "${YELLOW}⏹️  Stopping servers...${NC}"
@@ -21,8 +49,8 @@ stop_servers() {
     # Kill local servers
     pkill -f "python.*server\.py" 2>/dev/null
     
-    # Kill mini1 worker server
-    ssh mini1@192.168.5.1 "pkill -f 'python.*server\.py'" 2>/dev/null
+    # Kill remote worker server
+    ssh $REMOTE_SSH "pkill -f 'python.*server\.py'" 2>/dev/null
     
     # Kill API
     if [ -f .api.pid ]; then
@@ -45,31 +73,37 @@ start_servers() {
     # Clean up
     rm -f server.log api.log
     
-    # Create simple hosts.json (mini2 = master/local, mini1 = worker)
-    cat > hosts.json << 'EOF'
+    # Create hosts.json (local = rank 0, remote = rank 1)
+    cat > hosts.json << HOSTEOF
 [
-    {"ssh": "127.0.0.1", "ips": ["192.168.5.2"]},
-    {"ssh": "mini1@192.168.5.1", "ips": ["192.168.5.1"]}
+    {"ssh": "127.0.0.1", "ips": ["${LOCAL_IP}"]},
+    {"ssh": "${REMOTE_SSH}", "ips": ["${REMOTE_IP}"]}
 ]
-EOF
+HOSTEOF
 
-    # Sync server, config, and distributed utils to mini1
-    echo "Syncing files to mini1..."
-    scp server.py mini1@192.168.5.1:/Users/mini1/Movies/mlx_distributed_ring_inference_v2/
-    scp -r config mini1@192.168.5.1:/Users/mini1/Movies/mlx_distributed_ring_inference_v2/
-    scp -r distributed mini1@192.168.5.1:/Users/mini1/Movies/mlx_distributed_ring_inference_v2/
+    # Sync server, config, and distributed utils to remote
+    echo "Syncing files to ${REMOTE_NAME}..."
+    scp server.py ${REMOTE_SSH}:${REMOTE_CWD}/
+    scp -r config ${REMOTE_SSH}:${REMOTE_CWD}/
+    scp -r distributed ${REMOTE_SSH}:${REMOTE_CWD}/
 
     # Sync .env if it exists (optional configuration)
     if [ -f .env ]; then
         echo "Syncing .env configuration..."
-        scp .env mini1@192.168.5.1:/Users/mini1/Movies/mlx_distributed_ring_inference_v2/
+        scp .env ${REMOTE_SSH}:${REMOTE_CWD}/
     fi
     
+    # MLX --cwd applies to ALL nodes, but paths differ per machine.
+    # Use a /tmp symlink that resolves to the correct local path on each node.
+    SHARED_CWD="/tmp/mlx_ring_cwd"
+    ln -sfn "$(pwd)" "${SHARED_CWD}"
+    ssh ${REMOTE_SSH} "ln -sfn '${REMOTE_CWD}' '${SHARED_CWD}'"
+
     echo ""
     echo -e "${YELLOW}Starting distributed server...${NC}"
-    
-    # Launch with MLX
-    mlx.launch --hostfile hosts.json --backend ring --verbose --cwd /Users/mini1/Movies/mlx_distributed_ring_inference_v2 python3 server.py >> server.log 2>&1 &
+
+    # Use Homebrew mlx.launch (0.30.5) — uses bash scripts, no sys.executable path issue
+    /opt/homebrew/bin/mlx.launch --hostfile hosts.json --backend ring --verbose --cwd ${SHARED_CWD} python3 server.py >> server.log 2>&1 &
     
     echo $! > .server.pid
     
@@ -106,8 +140,8 @@ check_status() {
     ps aux | grep -E "(server\.py|api\.py)" | grep -v grep || echo "  None"
     
     echo ""
-    echo "Mini1 (worker):"
-    ssh mini1@192.168.5.1 "ps aux | grep 'server\.py' | grep -v grep" || echo "  None"
+    echo "${REMOTE_NAME} (worker):"
+    ssh $REMOTE_SSH "ps aux | grep 'server\.py' | grep -v grep" || echo "  None"
     
     echo ""
     if curl -s http://localhost:8100/health > /dev/null 2>&1; then
@@ -135,7 +169,7 @@ test_inference() {
     sleep 1
     echo "CPU usage:"
     ps aux | grep server | grep -v grep | awk '{print "Mini1: " $3 "%"}'
-    ssh mini1@192.168.5.1 "ps aux | grep server | grep -v grep | awk '{print \"Mini1: \" \$3 \"%\"}'"
+    ssh $REMOTE_SSH "ps aux | grep server | grep -v grep | awk '{print \"${REMOTE_NAME}: \" \$3 \"%\"}'"
     
     wait $CURL_PID
 }

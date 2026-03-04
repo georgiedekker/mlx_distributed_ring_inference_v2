@@ -293,7 +293,7 @@ async def chat_completions(req: ChatRequest):
     response = ChatResponse(
         id=str(uuid.uuid4()),
         created=int(time.time()),
-        model=req.model,
+        model=config.model.repo,
         conversation_id=conversation_id,
         choices=[
             {
