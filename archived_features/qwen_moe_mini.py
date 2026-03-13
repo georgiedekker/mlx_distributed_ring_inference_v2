@@ -439,10 +439,13 @@ class QwenMoEMiniModel(nn.Module):
             if T > 1:
                 mask = nn.MultiHeadAttention.create_additive_causal_mask(T)
                 mask = mask.astype(h.dtype)
+            layer_cache: List[Optional[KVCache]]
             if cache is None:
-                cache = [None] * len(self.layers)
+                layer_cache = [None for _ in self.layers]
+            else:
+                layer_cache = cache
             for i, layer in enumerate(self.layers):
-                h = layer(h, mask, cache[i])
+                h = layer(h, mask, layer_cache[i])
             return self.norm(h)
 
         # Use pipeline – ranks coordinate via send/recv/all_gather
@@ -454,8 +457,11 @@ class QwenMoEMiniModel(nn.Module):
         if T > 1:
             mask = nn.MultiHeadAttention.create_additive_causal_mask(T)
             mask = mask.astype(h.dtype)
+        local_cache: List[Optional[KVCache]]
         if cache is None:
-            cache = [None] * self.num_layers
+            local_cache = [None for _ in range(self.num_layers)]
+        else:
+            local_cache = cache
 
         # Receive hidden state from next rank (higher pipeline rank) unless we
         # are the first stage (highest rank)
@@ -465,7 +471,7 @@ class QwenMoEMiniModel(nn.Module):
 
         # Run local layers
         for i in range(self.num_layers):
-            h = self.layers[self.start_idx + i](h, mask, cache[i])
+            h = self.layers[self.start_idx + i](h, mask, local_cache[i])
 
         # Send hidden state to previous rank unless we are the last stage (rank=0)
         if pipeline_rank != 0:
