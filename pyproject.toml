@@ -17,12 +17,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.1.0",
+    "ruff>=0.15",
 ]
 
 [dependency-groups]
 dev = [
-    "ty>=0.0.15",
+    "ty>=0.0.23",
     "urllib3>=2.6.3",
     "werkzeug>=3.1.5",
 ]

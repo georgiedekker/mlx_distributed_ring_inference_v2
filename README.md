@@ -1,165 +1,147 @@
 # MLX Distributed Ring Inference
 
-Run large language models across multiple Mac devices using MLX's distributed ring backend over Thunderbolt networking. Split models across 2+ Macs using tensor parallelism for collaborative inference.
+Run large language models across multiple Mac devices using MLX's distributed ring backend over Thunderbolt networking. Port 8100.
 
-## Table of Contents
-- [Overview](#overview)
-- [Current Setup](#current-setup)
-- [Prerequisites](#prerequisites)
-- [Complete Setup Guide](#complete-setup-guide)
-  - [Step 1: Check System Requirements](#step-1-check-system-requirements)
-  - [Step 2: Install Required Software](#step-2-install-required-software)
-  - [Step 3: Connect Devices via Thunderbolt](#step-3-connect-devices-via-thunderbolt)
-  - [Step 4: Configure Thunderbolt Networking](#step-4-configure-thunderbolt-networking)
-  - [Step 5: Set Up SSH Access](#step-5-set-up-ssh-access)
-  - [Step 6: Install the Project](#step-6-install-the-project)
-  - [Step 7: Run Distributed Inference](#step-7-run-distributed-inference)
-- [Using the System](#using-the-system)
-- [Performance](#performance)
-- [RDMA / Thunderbolt 5](#rdma--thunderbolt-5)
-- [Scaling: Adding More Devices](#scaling-adding-more-devices)
-- [Troubleshooting](#troubleshooting)
-- [Architecture](#architecture)
+| | |
+|---|---|
+| **Stack** | Python 3.14 · MLX · FastAPI · Pydantic |
+| **Hardware** | 2x Mac Mini M4 16GB via Thunderbolt Bridge |
+| **Model** | mlx-community/Qwen3-14B-4bit (tensor parallelism) |
+| **Runs on** | mini1 + mini2 (native macOS, no K8s) |
 
-## Overview
+## What MLX Distributed Ring Inference Does
 
-This project distributes a large language model across multiple Mac computers connected via Thunderbolt, using MLX's ring communication backend. It uses **tensor parallelism** (`model.shard()`) to split attention heads and MLP layers across ranks, so each Mac processes a fraction of every layer in parallel.
+When an OpenAI-compatible chat completion request arrives at the FastAPI server on port 8100, the API process serializes the prompt and forwards it to the distributed inference server over a Unix domain socket (`/tmp/mlx_ring.sock`). The inference server runs as a multi-rank MLX process launched by `mlx.launch`, with rank 0 on the master machine and rank 1 on the worker connected via Thunderbolt Bridge TCP at ~10-20 Gbps.
 
-## Current Setup
+The inference server uses tensor parallelism (`model.shard()`) to split attention heads and MLP layers evenly across ranks. When rank 0 receives a prompt, it broadcasts the text and generation parameters to all ranks using `mx.distributed.all_sum` over a fixed-size byte buffer. Every rank then tokenizes the prompt identically, and all ranks participate in `stream_generate` together. After each transformer layer, an all-reduce operation synchronizes partial results across the ring. Rank 0 collects the generated tokens, assembles performance metrics (prompt eval tok/s, generation tok/s), and sends the response back through the socket to the API server.
 
-| Component | Value |
-|-----------|-------|
-| **Model** | `mlx-community/Qwen3-14B-4bit` |
-| **Devices** | 2x Mac Mini M4 (16GB each) |
-| **Parallelism** | Tensor parallelism via `model.shard()` |
-| **Communication** | MLX ring backend over Thunderbolt Bridge |
-| **IPC** | Unix domain socket (`/tmp/mlx_ring.sock`) |
-| **API** | OpenAI-compatible at `http://localhost:8100` |
-| **Master** | mini2 (192.168.5.2) |
-| **Worker** | mini1 (192.168.5.1) |
+The API server formats the response into OpenAI-compatible JSON with usage statistics and performance data, then returns it to the caller. A simple conversation cache on rank 0 tracks previous prompts per conversation ID, enabling cache-hit detection for repeated prefixes. The entire system is stateless beyond this in-memory cache -- there is no database, no persistent storage, and no authentication. The project runs exclusively on macOS with Apple Silicon and does not deploy to Kubernetes.
 
-## Prerequisites
+## Features
 
-### Hardware Requirements
+- **Tensor parallelism via model.shard()** — splits attention heads and MLP neurons across ranks so each Mac processes only its fraction of every layer, enabling models larger than a single machine's memory
+- **OpenAI-compatible API** — exposes `/v1/chat/completions` following the OpenAI format so existing clients and tools work without modification
+- **Unix domain socket IPC** — decouples the FastAPI server from the distributed inference process so the API can restart independently without reloading the model
+- **Automatic file sync** — `launch.sh` detects the local machine, generates `hosts.json`, and SCPs server code, config, and `.env` to the worker before launching
+- **Prompt broadcasting** — encodes prompts as padded byte arrays and uses `all_sum` to distribute text across ranks without requiring shared filesystem access
+- **Conversation caching** — tracks prompt prefixes per conversation ID on rank 0 for cache-hit detection on repeated contexts
+- **RDMA-ready architecture** — switching from `ring` (TCP) to `jaccl` (RDMA over Thunderbolt 5) requires only a backend flag change and `rdma` fields in `hosts.json`, enabling ~80 Gbps transfers
+- **Validated configuration** — Pydantic-style dataclass config with type-safe environment variable loading, cross-config property delegation, and helpful validation error messages
+- **Machine auto-detection** — `launch.sh` inspects local network interfaces to determine whether it is running on mini1 or mini2 and configures master/worker roles accordingly
 
-- 2+ Mac computers with Apple Silicon (M1/M2/M3/M4)
-- Minimum 16GB RAM per Mac
-- Thunderbolt 3/4/5 cable(s) connecting devices
-- All devices must have **equal RAM** (MLX splits evenly — see [Scaling](#scaling-adding-more-devices))
-
-### Software Requirements
-
-- macOS Sequoia (15.0) or later (macOS 26.2+ for RDMA)
-- Python 3.11+ (tested with 3.14)
-- MLX 0.30.5+, mlx-lm 0.30.7+
-- `python-dotenv`, `uvicorn`, `fastapi`, `pydantic`
-
-## Complete Setup Guide
-
-### Step 1: Check System Requirements
-
-On **each Mac**:
+## Quick Start
 
 ```bash
-sw_vers -productVersion        # macOS version
-uname -m                       # Should be arm64
-sysctl hw.memsize | awk '{print $2/1024/1024/1024 " GB"}'  # RAM
-```
-
-### Step 2: Install Required Software
-
-On **each Mac**:
-
-```bash
-# Homebrew
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Python
-brew install python@3.14
-
-# MLX and dependencies (--break-system-packages for Homebrew Python)
 pip3 install --break-system-packages mlx mlx-lm python-dotenv uvicorn fastapi pydantic huggingface_hub
-
-# Verify
-python3 -c "import mlx.core as mx; print('MLX', mx.__version__)"
-python3 -c "import mlx_lm; print('mlx-lm', mlx_lm.__version__)"
-```
-
-### Step 3: Connect Devices via Thunderbolt
-
-1. Connect Macs directly with a Thunderbolt cable
-2. For 2 Macs: direct cable between any TB port
-3. For 3+ Macs: daisy chain or use a Thunderbolt hub
-
-### Step 4: Configure Thunderbolt Networking
-
-On **each Mac**, go to System Settings > Network > Thunderbolt Bridge > Details > TCP/IP:
-
-| Mac | IP Address | Subnet Mask |
-|-----|-----------|-------------|
-| mini1 (worker) | 192.168.5.1 | 255.255.255.0 |
-| mini2 (master) | 192.168.5.2 | 255.255.255.0 |
-| Additional | 192.168.5.N | 255.255.255.0 |
-
-Verify: `ping -c 3 192.168.5.1` from mini2
-
-### Step 5: Set Up SSH Access
-
-```bash
-# Enable Remote Login on each Mac:
-# System Settings > General > Sharing > Remote Login
-
-# On the master (mini2), set up passwordless SSH:
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
-ssh-copy-id -i ~/.ssh/id_ed25519 mini1@192.168.5.1
-
-# Verify
-ssh mini1@192.168.5.1 "echo 'SSH works'"
-```
-
-### Step 6: Install the Project
-
-On the **master** (mini2):
-
-```bash
-git clone <repo-url> ~/Movies/mlx_distributed_ring_inference_v2
-cd ~/Movies/mlx_distributed_ring_inference_v2
-cp .env.example .env  # Edit with your model/settings
-```
-
-On **each worker**, create the matching directory:
-
-```bash
-# On mini1
-mkdir -p ~/Movies/mlx_distributed_ring_inference_v2/distributed
-mkdir -p ~/Movies/mlx_distributed_ring_inference_v2/config
-```
-
-The launch script auto-syncs `server.py`, `config/`, `distributed/`, and `.env` to workers.
-
-Download the model on **every** machine:
-
-```bash
-python3 -c "from huggingface_hub import snapshot_download; snapshot_download('mlx-community/Qwen3-14B-4bit')"
-```
-
-### Step 7: Run Distributed Inference
-
-```bash
-cd ~/Movies/mlx_distributed_ring_inference_v2
-./launch.sh start
-```
-
-Test:
-
-```bash
+cp .env.example .env    # Edit with your model/settings
+./launch.sh start       # Syncs files to worker, loads model, starts API
 curl http://localhost:8100/health
-curl http://localhost:8100/model/info | python3 -m json.tool
-
-curl -X POST http://localhost:8100/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"qwen3-14b","messages":[{"role":"user","content":"Hello!"}],"max_tokens":50}'
 ```
+
+## API Endpoints
+
+### Chat `/v1/chat`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/chat/completions` | Generate chat completion (OpenAI format) |
+
+### Model
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/model/info` | Model metadata, context length, device count |
+
+### Health
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Service info and endpoint listing |
+| GET | `/health` | Health check with config summary |
+| GET | `/health/live` | Liveness probe |
+
+## Configuration
+
+All configuration via environment variables (loaded from `.env` by python-dotenv).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODEL_REPO` | `mlx-community/DeepSeek-Coder-V2-Lite-Instruct-8bit` | HuggingFace model repository |
+| `MODEL_CACHE_DIR` | `/Users/${USER}/.cache/huggingface/hub` | Model cache directory |
+| `API_HOST` | `192.168.5.1` | API listen host |
+| `API_PORT` | `8100` | API listen port |
+| `WORKER_HOSTS` | `192.168.5.2` | Comma-separated worker IPs |
+| `WORKER_SSH` | `mini2@192.168.5.2` | Comma-separated worker SSH strings |
+| `SOCKET_PATH` | `/tmp/mlx_ring.sock` | Unix socket for API-to-server IPC |
+| `NUM_DEVICES` | `2` | Number of distributed ranks |
+| `DISTRIBUTED_BACKEND` | `ring` | MLX backend (ring, jaccl) |
+| `KV_CACHE_MAX_SIZE` | *(none)* | Max KV-cache size (empty = no limit) |
+| `KV_CACHE_RESERVED_MEMORY_MB` | `2048` | Reserved memory for KV-cache in MB |
+| `MAX_SEQUENCE_LENGTH` | `4096` | Maximum sequence length |
+| `MAX_PROMPT_LEN_BYTES` | `4096` | Max prompt broadcast buffer in bytes |
+| `REQUEST_TIMEOUT_SECONDS` | `120` | Request timeout |
+| `POLL_INTERVAL_SECONDS` | `0.1` | Server poll interval for new requests |
+| `DEFAULT_MAX_TOKENS` | `50` | Default max tokens for generation |
+| `FILE_DESCRIPTOR_SOFT_LIMIT` | `2048` | Soft FD limit |
+| `FILE_DESCRIPTOR_HARD_LIMIT` | `4096` | Hard FD limit |
+| `MODEL_LOAD_WAIT_SECONDS` | `15` | Wait time after launching distributed server |
+| `LOG_LEVEL` | `INFO` | Logging level |
+
+## Architecture
+
+```
+mini2 (192.168.5.2)              mini1 (192.168.5.1)
+┌──────────────────────┐         ┌──────────────────────┐
+│  Master Node         │         │  Worker Node         │
+│  ┌────────────────┐  │  Ring   │  ┌────────────────┐  │
+│  │  server.py     │◄─┼────────┼──►  server.py     │  │
+│  │  Rank 0        │  │  (TB)  │  │  Rank 1        │  │
+│  │  All layers    │  │        │  │  All layers    │  │
+│  │  (1/2 heads)   │  │        │  │  (1/2 heads)   │  │
+│  └───────┬────────┘  │        │  └────────────────┘  │
+│          │ Unix sock │        │                      │
+│  ┌───────▼────────┐  │        │                      │
+│  │  api.py        │  │        │                      │
+│  │  FastAPI       │  │        │                      │
+│  │  :8100         │  │        │                      │
+│  └────────────────┘  │        │                      │
+└──────────────────────┘         └──────────────────────┘
+```
+
+With tensor parallelism, **every layer exists on every node**, but each node processes only its fraction of the attention heads and MLP neurons. All-reduce operations synchronize results across ranks after each layer.
+
+## Directory Structure
+
+```
+mlx_distributed_ring_inference_v2/
+├── launch.sh              # Launcher — auto-detects machine, syncs files, runs mlx.launch + API
+├── server.py              # Distributed inference server (runs on all ranks via mlx.launch)
+├── api.py                 # FastAPI server — OpenAI-compatible endpoint (rank 0 only)
+├── test_config.py         # Configuration system test script
+├── .env.example           # Environment variable template with all defaults
+├── hosts.json             # Generated by launch.sh — MLX host definitions
+├── requirements.txt       # Python dependencies
+├── pyproject.toml         # Project metadata and tool config
+├── config/
+│   ├── __init__.py        # Singleton config loader (get_config)
+│   └── manager.py         # 7 dataclass config sections + 3 facade classes + env loading
+├── distributed/
+│   ├── __init__.py        # Re-exports broadcast_prompt, shard_and_load
+│   └── utils.py           # Prompt broadcasting via all_sum + model shard/load logic
+└── archived_features/     # Deprecated experiments (MoE, prompt cache, memory-aware sharding)
+```
+
+## Performance
+
+Measured with Qwen3-14B-4bit on 2x Mac Mini M4 16GB over Thunderbolt Bridge (TCP):
+
+| Metric | Value |
+|--------|-------|
+| **Prompt eval** | 15-65 tok/s (scales with prompt length) |
+| **Generation** | ~12 tok/s |
+| **Model load time** | ~7 seconds |
+| **Memory per device** | ~8 GB (half the 4-bit model) |
+| **Network** | Thunderbolt Bridge TCP (~10-20 Gbps effective) |
 
 ## Using the System
 
@@ -199,33 +181,6 @@ data = response.json()
 print(data["choices"][0]["message"]["content"])
 print(data["performance"])  # tokens/sec metrics
 ```
-
-### Configuration
-
-Create a `.env` file (see `.env.example`):
-
-```bash
-MODEL_REPO=mlx-community/Qwen3-14B-4bit
-API_HOST=0.0.0.0
-API_PORT=8100
-SOCKET_PATH=/tmp/mlx_ring.sock
-NUM_DEVICES=2
-DEFAULT_MAX_TOKENS=2048
-MAX_SEQUENCE_LENGTH=8192
-LOG_LEVEL=INFO
-```
-
-## Performance
-
-Measured with Qwen3-14B-4bit on 2x Mac Mini M4 16GB over Thunderbolt Bridge (TCP):
-
-| Metric | Value |
-|--------|-------|
-| **Prompt eval** | 15-65 tok/s (scales with prompt length) |
-| **Generation** | ~12 tok/s |
-| **Model load time** | ~7 seconds |
-| **Memory per device** | ~8 GB (half the 4-bit model) |
-| **Network** | Thunderbolt Bridge TCP (~10-20 Gbps effective) |
 
 ## RDMA / Thunderbolt 5
 
@@ -287,7 +242,7 @@ On Mac Studio, the Thunderbolt port **adjacent to the Ethernet port** may not su
 
 MLX's tensor parallelism (`model.shard()`) divides attention heads and MLP weights **equally** across all ranks. With N devices, each gets `1/N` of the computation per layer.
 
-**All devices must have equal RAM.** MLX does not support heterogeneous clusters — it cannot give more weight to a machine with more memory. This is a known limitation ([GitHub Issue #1804](https://github.com/ml-explore/mlx/issues/1804)).
+**All devices must have equal RAM.** MLX does not support heterogeneous clusters -- it cannot give more weight to a machine with more memory. This is a known limitation ([GitHub Issue #1804](https://github.com/ml-explore/mlx/issues/1804)).
 
 ### Scaling Options
 
@@ -369,50 +324,41 @@ cat server.log    # Distributed inference server
 cat api.log       # FastAPI server
 ```
 
-## Architecture
+## Design Principles
 
-```
-mini2 (192.168.5.2)              mini1 (192.168.5.1)
-┌──────────────────────┐         ┌──────────────────────┐
-│  Master Node         │         │  Worker Node         │
-│  ┌────────────────┐  │  Ring   │  ┌────────────────┐  │
-│  │  server.py     │◄─┼────────┼──►  server.py     │  │
-│  │  Rank 0        │  │  (TB)  │  │  Rank 1        │  │
-│  │  All layers    │  │        │  │  All layers    │  │
-│  │  (1/2 heads)   │  │        │  │  (1/2 heads)   │  │
-│  └───────┬────────┘  │        │  └────────────────┘  │
-│          │ Unix sock │        │                      │
-│  ┌───────▼────────┐  │        │                      │
-│  │  api.py        │  │        │                      │
-│  │  FastAPI       │  │        │                      │
-│  │  :8100         │  │        │                      │
-│  └────────────────┘  │        │                      │
-└──────────────────────┘         └──────────────────────┘
+1. **Rank-symmetric execution** — every rank runs the same `server.py` code with the same model layers; only rank 0 additionally handles socket I/O and the API server, keeping the codebase simple
+2. **Decoupled API and inference** — the FastAPI process communicates with the distributed server via Unix socket so the API can restart without reloading the ~8 GB model across two machines
+3. **Zero infrastructure** — no Docker, no Kubernetes, no database; the entire system is two Python processes per machine launched by a shell script over SSH
+
+## Testing
+
+```bash
+python3 test_config.py                    # Configuration validation tests (4 test cases)
+./launch.sh test                          # Live inference smoke test (requires running server)
 ```
 
-With tensor parallelism, **every layer exists on every node**, but each node processes only its fraction of the attention heads and MLP neurons. All-reduce operations synchronize results across ranks after each layer.
+No pytest suite exists. Tests require Apple Silicon hardware with MLX installed.
 
-## Project Structure
+## CI/CD
 
-```
-mlx_distributed_ring_inference_v2/
-├── launch.sh          # Launcher — manages hosts.json, file sync, mlx.launch, API
-├── server.py          # Distributed MLX inference server (runs on all ranks)
-├── api.py             # FastAPI server — OpenAI-compatible endpoint (rank 0 only)
-├── .env               # Configuration (model, network, performance settings)
-├── config/            # Configuration facades (Pydantic models)
-├── distributed/       # Distributed utilities (sharding, prompt broadcast)
-├── hosts.json         # Generated by launch.sh — MLX host definitions
-├── requirements.txt   # Python dependencies
-└── pyproject.toml     # Project metadata
-```
+No CI/CD pipeline. This project runs exclusively on local Apple Silicon hardware (2x Mac Mini M4) connected via Thunderbolt. It has no Dockerfile, no GitHub Actions workflow, and does not deploy to the cluster. Code is synced to the worker machine via SCP in `launch.sh`.
 
-## Acknowledgments
+## Dependencies
 
-- [MLX](https://github.com/ml-explore/mlx) by Apple's machine learning research team
-- [mlx-lm](https://github.com/ml-explore/mlx-examples/tree/main/llms/mlx_lm) for model loading and sharding
-- [Awni Hannun's distributed inference guide](https://gist.github.com/awni/ec071fd27940698edd14a4191855bba6)
+- **MLX** (>=0.10.0) — Apple's ML framework for distributed tensor operations and all-reduce communication
+- **mlx-lm** (>=0.10.0) — model loading, tokenization, sharding, and stream generation
+- **FastAPI** (>=0.100.0) — REST API framework for the OpenAI-compatible endpoint
+- **Uvicorn** (>=0.23.0) — ASGI server
+- **Pydantic** (>=2.0.0) — request/response validation and configuration dataclasses
+- **huggingface-hub** (>=0.20.0) — model downloading and snapshot management
+- **transformers** (>=4.36.0) — tokenizer support
+- **NumPy** (>=1.24.0) — array utilities
+- **python-dotenv** (>=1.0.0) — environment variable loading from `.env` files
 
-## License
+## Known Issues
 
-MIT License
+- **No streaming support** — `stream: true` in chat completion requests returns HTTP 501. The distributed server streams internally but the socket IPC sends the full response at once.
+- **Homogeneous RAM required** — MLX tensor parallelism splits evenly across ranks with no support for heterogeneous memory. All devices must have equal RAM. See [mlx#1804](https://github.com/ml-explore/mlx/issues/1804).
+- **No automated tests** — `test_config.py` covers configuration validation only. There are no unit or integration tests for the inference pipeline since MLX requires Apple Silicon hardware.
+- **Archived dead code** — `archived_features/` contains deprecated experiments (MoE sharding, prompt cache, memory-aware sharding) that are not used by any live code path.
+- **Default model mismatch** — `.env.example` and `config/manager.py` default to `DeepSeek-Coder-V2-Lite-Instruct-8bit`, but the live setup and README examples use `Qwen3-14B-4bit`. The actual model is controlled by the `.env` file.
