@@ -2,7 +2,7 @@
 name = "mlx-distributed-ring-inference"
 version = "2.0.0"
 description = "MLX distributed inference using ring topology for Apple Silicon"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 dependencies = [
     "mlx>=0.10.0",
     "mlx-lm>=0.10.0",
@@ -36,13 +36,13 @@ include = ["distributed*", "config*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py314"
 
 [tool.local-ci]
 skip_tests = true  # Requires Apple Silicon (MLX) - tests run manually on mini1/mini2
 
 [tool.ty.environment]
-python-version = "3.10"
+python-version = "3.14"
 
 [tool.ty.rules]
 unresolved-import = "ignore"

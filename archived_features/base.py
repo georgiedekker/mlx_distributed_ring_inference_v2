@@ -369,7 +369,7 @@ def make_kv_caches(
                 try:
                     layer_num = int(name.split(".")[-1])
                     num_layers = max(num_layers, layer_num + 1)
-                except (ValueError, IndexError):
+                except ValueError, IndexError:
                     pass
 
         if num_layers == 0:

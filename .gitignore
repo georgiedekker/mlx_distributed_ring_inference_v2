@@ -60,3 +60,5 @@ test_*.py
 .local-ci-commit.txt
 .local-ci-push.txt
 2
+01_recent_push_failure.txt
+02_deploy_issues.txt
