@@ -83,7 +83,7 @@ HOSTEOF
 
     # Sync server, config, and distributed utils to remote
     echo "Syncing files to ${REMOTE_NAME}..."
-    scp server.py ${REMOTE_SSH}:${REMOTE_CWD}/
+    scp server.py pyproject.toml uv.lock ${REMOTE_SSH}:${REMOTE_CWD}/
     scp -r config ${REMOTE_SSH}:${REMOTE_CWD}/
     scp -r distributed ${REMOTE_SSH}:${REMOTE_CWD}/
 
@@ -99,23 +99,47 @@ HOSTEOF
     ln -sfn "$(pwd)" "${SHARED_CWD}"
     ssh ${REMOTE_SSH} "ln -sfn '${REMOTE_CWD}' '${SHARED_CWD}'"
 
+    # Ensure dependencies are synced on both hosts using uv (prefers .venv)
+    echo "Syncing Python deps locally (uv sync)..."
+    uv sync --frozen --no-install-project
+    echo "Syncing Python deps on ${REMOTE_NAME} (uv sync)..."
+    ssh ${REMOTE_SSH} "cd '${REMOTE_CWD}' && uv sync --frozen --no-install-project"
+
     echo ""
     echo -e "${YELLOW}Starting distributed server...${NC}"
 
-    # Use Homebrew mlx.launch (0.30.5) — uses bash scripts, no sys.executable path issue
-    /opt/homebrew/bin/mlx.launch --hostfile hosts.json --backend ring --verbose --cwd ${SHARED_CWD} python3 server.py >> server.log 2>&1 &
-    
+    # Use project venv python from shared symlink so path matches on both hosts
+    PYTHON_BIN="${SHARED_CWD}/.venv/bin/python"
+
+    # Build ring hostfile (one port per host starting at 32323)
+    RING_HOSTFILE="/tmp/mlx_ring_hostfile.json"
+    python3 - <<PY
+import json
+hosts = [["${LOCAL_IP}:32323"], ["${REMOTE_IP}:32324"]]
+with open("${RING_HOSTFILE}", "w") as f:
+    json.dump(hosts, f)
+PY
+    scp ${RING_HOSTFILE} ${REMOTE_SSH}:${RING_HOSTFILE}
+
+    # Start local rank (0) first
+    MLX_RANK=0 MLX_WORLD_SIZE=2 MLX_HOSTFILE=${RING_HOSTFILE} nohup ${PYTHON_BIN} ${SHARED_CWD}/server.py >> server.log 2>&1 &
     echo $! > .server.pid
+
+    # Give rank 0 time to start listening
+    sleep 5
+
+    # Start remote rank (1)
+    ssh ${REMOTE_SSH} "cd '${SHARED_CWD}' && MLX_RANK=1 MLX_WORLD_SIZE=2 MLX_HOSTFILE=${RING_HOSTFILE} nohup ${PYTHON_BIN} ${SHARED_CWD}/server.py >> server.log 2>&1 & echo \\$! > .server.remote.pid"
     
     # Wait for model loading
     echo "Waiting for model loading..."
-    sleep 15
+    sleep 25
     
-    if ps -p $(cat .server.pid) > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Distributed server running (PID: $(cat .server.pid))${NC}"
+    if ps -p $(cat .server.pid) > /dev/null 2>&1 && ssh ${REMOTE_SSH} "ps -p \$(cat ${SHARED_CWD}/.server.remote.pid) >/dev/null 2>&1"; then
+        echo -e "${GREEN}✓ Distributed server running (local PID: $(cat .server.pid))${NC}"
         
         # Start API
-        python3 api.py >> api.log 2>&1 &
+        ${PYTHON_BIN} ${SHARED_CWD}/api.py >> api.log 2>&1 &
         echo $! > .api.pid
         
         sleep 2
