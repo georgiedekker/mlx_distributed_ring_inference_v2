@@ -247,7 +247,7 @@ def shard_and_load(repo: str, config: Any = None, adapter_path: str = "") -> Tup
 
     # Synchronize all processes
     try:
-        mx.eval(dist.all_sum(mx.array(1.0), stream=mx.cpu))  # type: ignore[arg-type]
+        mx.eval(dist.all_sum(mx.array(1.0), stream=mx.Device(mx.cpu)))
     except Exception as e:
         raise RuntimeError(f"Failed to synchronize processes: {e}")
 
