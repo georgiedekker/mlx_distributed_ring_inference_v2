@@ -265,4 +265,6 @@ def _download(repo: str, allow_patterns: list[str]) -> Path:
     Returns:
         Path to the downloaded model directory
     """
-    return Path(snapshot_download(repo, allow_patterns=allow_patterns))
+    # Revision intentionally unpinned — this helper downloads model weights specified by user-supplied
+    # config (e.g. mlx-community/Qwen3-14B-4bit) where pinning a revision would prevent normal model updates.
+    return Path(snapshot_download(repo, allow_patterns=allow_patterns))  # nosec B615

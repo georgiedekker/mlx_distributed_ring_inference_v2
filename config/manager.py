@@ -228,9 +228,11 @@ class DistributedConfig:
 class FilePathsConfig:
     """File paths for IPC and logging."""
 
-    socket_path: str = "/tmp/mlx_ring.sock"
-    request_file_path: str = "/tmp/mlx_request.json"
-    response_file_path: str = "/tmp/mlx_response.json"
+    # /tmp paths are intentional defaults for local IPC between trusted MLX ring processes on the same Mac.
+    # Override via SOCKET_PATH / REQUEST_FILE_PATH / RESPONSE_FILE_PATH env vars.
+    socket_path: str = "/tmp/mlx_ring.sock"  # nosec B108
+    request_file_path: str = "/tmp/mlx_request.json"  # nosec B108
+    response_file_path: str = "/tmp/mlx_response.json"  # nosec B108
     server_log_path: str = "server.log"
     api_log_path: str = "api.log"
 
@@ -487,9 +489,10 @@ class Config:
         )
 
         file_paths_config = FilePathsConfig(
-            socket_path=os.getenv("SOCKET_PATH", "/tmp/mlx_ring.sock"),
-            request_file_path=os.getenv("REQUEST_FILE_PATH", "/tmp/mlx_request.json"),
-            response_file_path=os.getenv("RESPONSE_FILE_PATH", "/tmp/mlx_response.json"),
+            # Local IPC defaults; same justification as FilePathsConfig dataclass defaults above.
+            socket_path=os.getenv("SOCKET_PATH", "/tmp/mlx_ring.sock"),  # nosec B108
+            request_file_path=os.getenv("REQUEST_FILE_PATH", "/tmp/mlx_request.json"),  # nosec B108
+            response_file_path=os.getenv("RESPONSE_FILE_PATH", "/tmp/mlx_response.json"),  # nosec B108
             server_log_path=os.getenv("SERVER_LOG_PATH", "server.log"),
             api_log_path=os.getenv("API_LOG_PATH", "api.log"),
         )

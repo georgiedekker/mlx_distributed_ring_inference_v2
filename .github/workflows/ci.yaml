@@ -1,0 +1,54 @@
+# CI Pipeline - Lint & Security only
+# This repo requires Apple Silicon (MLX) — tests run manually on mini1/mini2.
+# Layout is FLAT: api.py, server.py, distributed/, config/ at the repo root.
+# No ty (MLX doesn't resolve on amd64 runners). No pytest (skip_tests=true).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-security:
+    name: Lint & Security
+    runs-on: [self-hosted, linux, amd64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run ruff linter (check only)
+        run: uv run ruff check .
+
+      - name: Run ruff formatter (check only)
+        run: uv run ruff format --check .
+
+      - name: Install security tools
+        run: uv pip install bandit pip-audit
+
+      - name: Security scan - bandit
+        run: uv run bandit -r . -x ./.venv,./venv,./archived_features -ll -ii
+
+      - name: Security scan - pip-audit
+        run: uv run pip-audit --skip-editable --ignore-vuln CVE-2026-3219
