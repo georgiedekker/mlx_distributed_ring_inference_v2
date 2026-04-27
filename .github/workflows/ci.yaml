@@ -51,4 +51,4 @@ jobs:
         run: uv run bandit -r . -x ./.venv,./venv,./archived_features -ll -ii
 
       - name: Security scan - pip-audit
-        run: uv run pip-audit --skip-editable --ignore-vuln CVE-2026-3219
+        run: uv run pip-audit --skip-editable
