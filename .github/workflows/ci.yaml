@@ -1,7 +1,8 @@
 # CI Pipeline - Lint & Security only
-# This repo requires Apple Silicon (MLX) — tests run manually on mini1/mini2.
+# This repo requires Apple Silicon (MLX) — runs on the mini2-darwin self-hosted
+# runner (labels self-hosted/macOS/ARM64/darwin/mlx).
 # Layout is FLAT: api.py, server.py, distributed/, config/ at the repo root.
-# No ty (MLX doesn't resolve on amd64 runners). No pytest (skip_tests=true).
+# No ty (some MLX paths). No pytest (skip_tests=true).
 
 name: CI
 
@@ -22,7 +23,7 @@ permissions:
 jobs:
   lint-and-security:
     name: Lint & Security
-    runs-on: [self-hosted, linux, amd64]
+    runs-on: [self-hosted, macOS, ARM64, mlx]
     steps:
       - uses: actions/checkout@v4
         with:
