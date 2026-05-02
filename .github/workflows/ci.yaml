@@ -1,8 +1,9 @@
 # CI Pipeline - Lint & Security only
-# This repo requires Apple Silicon (MLX) — runs on the mini2-darwin self-hosted
-# runner (labels self-hosted/macOS/ARM64/darwin/mlx).
+# This repo lives at georgiedekker/mlx_distributed_ring_inference_v2 (outside
+# the nonagenticai org), so it cannot reach the org's self-hosted runner pool.
+# Lint + security scan run fine on ubuntu-latest; real MLX execution happens
+# locally on mini1/mini2 (skip_tests=true).
 # Layout is FLAT: api.py, server.py, distributed/, config/ at the repo root.
-# No ty (some MLX paths). No pytest (skip_tests=true).
 
 name: CI
 
@@ -23,7 +24,7 @@ permissions:
 jobs:
   lint-and-security:
     name: Lint & Security
-    runs-on: [self-hosted, macOS, ARM64, mlx]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
