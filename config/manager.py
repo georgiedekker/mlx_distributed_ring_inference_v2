@@ -27,7 +27,7 @@ class ConfigValidationError(Exception):
 class ModelConfig:
     """Model configuration settings."""
 
-    repo: str = "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-8bit"
+    repo: str = "mlx-community/Qwen3-14B-4bit"
     cache_dir: str = ""  # Empty means use HuggingFace default
 
     # Back-reference for cross-config properties (wired by Config.__post_init__)
@@ -459,7 +459,7 @@ class Config:
 
         # Create configuration sections
         model_config = ModelConfig(
-            repo=os.getenv("MODEL_REPO", "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-8bit"),
+            repo=os.getenv("MODEL_REPO", "mlx-community/Qwen3-14B-4bit"),
             cache_dir=os.getenv("MODEL_CACHE_DIR", "/Users/${USER}/.cache/huggingface/hub"),
         )
 
@@ -534,7 +534,7 @@ def load_config(env_file: Optional[str] = None) -> Config:
         >>> print(config.network.api_port)
         8100
         >>> print(config.model.repo)
-        mlx-community/DeepSeek-Coder-V2-Lite-Instruct-8bit
+        mlx-community/Qwen3-14B-4bit
     """
     # Determine .env file path
     if env_file is None:

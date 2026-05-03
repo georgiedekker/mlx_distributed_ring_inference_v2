@@ -4,8 +4,8 @@ version = "2.0.0"
 description = "MLX distributed inference using ring topology for Apple Silicon"
 requires-python = ">=3.14"
 dependencies = [
-    "mlx>=0.10.0",
-    "mlx-lm>=0.10.0",
+    "mlx>=0.30.5",
+    "mlx-lm>=0.30.7",
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",
     "pydantic>=2.0.0",
@@ -37,6 +37,7 @@ include = ["distributed*", "config*"]
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+extend-exclude = ["archived_features"]
 
 [tool.local-ci]
 skip_tests = true  # Requires Apple Silicon (MLX) - tests run manually on mini1/mini2
