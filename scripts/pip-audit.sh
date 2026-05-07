@@ -28,4 +28,5 @@ fi
 uv export --frozen --no-emit-project --all-extras --all-groups \
   --format requirements-txt --no-hashes --quiet \
 | uvx --quiet --from "pip-audit==${PIP_AUDIT_VERSION}" \
-    pip-audit -r /dev/stdin --disable-pip --no-deps "${ignore_args[@]}"
+    pip-audit -r /dev/stdin --disable-pip --no-deps \
+    ${ignore_args[@]+"${ignore_args[@]}"}

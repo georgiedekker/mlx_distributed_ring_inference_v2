@@ -37,7 +37,7 @@ run_audit_json() {
     --format requirements-txt --no-hashes --quiet 2>/dev/null \
   | uvx --quiet --from "pip-audit==${PIP_AUDIT_VERSION}" \
       pip-audit -r /dev/stdin --disable-pip --no-deps --format json \
-      "${ignore_args[@]}" 2>/dev/null || true
+      ${ignore_args[@]+"${ignore_args[@]}"} 2>/dev/null || true
 }
 
 is_direct_dep() {
