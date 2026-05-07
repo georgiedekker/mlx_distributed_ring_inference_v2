@@ -37,6 +37,13 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
+      - id: pip-audit
+        name: pip-audit security scan (uv-export → pip-audit)
+        entry: scripts/pip-audit.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
 ci:
   autofix_prs: false
   autoupdate_schedule: monthly

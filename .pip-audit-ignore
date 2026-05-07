@@ -1,0 +1,3 @@
+# Each line is one vulnerability ID to skip during pip-audit.
+# Format: ID  # package date (reason)
+# Add only when no fix version exists upstream. Re-evaluate periodically.
