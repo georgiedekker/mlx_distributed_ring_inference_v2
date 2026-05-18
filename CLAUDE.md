@@ -1,5 +1,26 @@
 # MLX Distributed Ring Inference — Project Context
 
+## ⏸️ DECOMMISSIONED 2026-05-14 — bridge dismantled, not currently runnable
+
+The mini1↔mini2 Thunderbolt Bridge that this project runs over has been **physically
+disconnected** (cables pulled by the user 2026-05-14). Reason: LLM inference now runs on
+**pgx** (NVIDIA GB10), so the 2×M4 distributed ring is no longer needed. Nothing here is
+broken — it is intentionally idle.
+
+**Why it was pulled:** the bridge had *multiple* Thunderbolt cables between the two minis,
+all enslaved to `bridge0` with macOS STP not arbitrating → a layer-2 loop → ~196k pkt/s
+broadcast storm that pinned `mDNSResponder`/`netbiosd` and drove load to ~11 on both minis.
+
+### To bring it back
+1. **Reconnect exactly ONE Thunderbolt cable** between mini1 and mini2 — **not two**.
+   Two cables both in `bridge0` re-creates the broadcast-storm loop. If you must have
+   redundancy, enable STP on `bridge0` properly first.
+2. `bridge0` re-acquires link; `192.168.5.1` (mini1) / `192.168.5.2` (mini2) come back
+   (verify: `ifconfig bridge0`). `launch.sh` detects the machine off these IPs.
+3. `./launch.sh start` from this dir on either mini.
+4. `netbiosd` is disabled on both minis (unrelated cleanup, 2026-05-14) — leave it disabled;
+   the ring does not need it.
+
 ## Current State (2026-02-22)
 
 The distributed ring is **working** with:
